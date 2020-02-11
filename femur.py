@@ -68,30 +68,31 @@ def computeRs(RsInputImg,
   RsImage[al3_null, 0] = eigs[:,0]*tmp # Rtube
   tmp = 1. / eigs[:,2]
   RsImage[al3_null, 1] = eigs[:,1]*tmp # Rsheet
-  tmp = 3. / det_image
+  tmp = 3. / det_image[al3_null]
   RsImage[al3_null, 2] = eigs[:,0]*tmp # Rblob
-  RsImage[al3_null, 3] = Rnoise # Rnoise
-  return RsImage, eigenvalues_matrix
+  RsImage[al3_null, 3] = Rnoise[al3_null] # Rnoise
+  return RsImage, eigenvalues_matrix, al3_null
+
 
 
 def computeSheetnessMeasure(SheetMeasInput,
                             alpha = 0.5,
                             beta = 0.5,
                             gamma = 0.5):
-  RsImg, EigsImg = computeRs(SheetMeasInput)
-  SheetnessImage = np.empty(eigenvalues_matrix.shape[:-1] + (1,), dtype=float)
-  SheetnessImage = - np.sign( EigsImg[:,:,:,2] )
-  SheetnessImage *= np.exp(-RsImg[:,:,:,1])
-  tmp = 1. / (alpha*alpha)
-  SheetnessImage *= np.exp(-RsImg[:,:,:,1] * RsImg[:,:,:,1] * tmp)
+  RsImg, EigsImg, NoNullEigs = computeRs(RsInputImg = SheetMeasInput)
+  SheetnessImage = np.empty(EigsImg.shape[:-1], dtype=float)
+  SheetnessImage[NoNullEigs] = - np.sign( EigsImg[NoNullEigs,2] )
   tmp = 1. / (beta*beta)
-  SheetnessImage *= np.exp(-RsImg[:,:,:,0] * RsImg[:,:,:,0] * tmp)
+  SheetnessImage[NoNullEigs] *= np.exp(-RsImg[NoNullEigs,0] * RsImg[NoNullEigs,0] * tmp)
+  tmp = 1. / (alpha*alpha)
+  SheetnessImage[NoNullEigs] *= np.exp(-RsImg[NoNullEigs,1] * RsImg[NoNullEigs,1] * tmp)
   tmp = 1. / (gamma*gamma)
-  SheetnessImage *= np.exp(-RsImg[:,:,:,2] * RsImg[:,:,:,2] * tmp)
+  SheetnessImage[NoNullEigs] *= np.exp(-RsImg[NoNullEigs,2] * RsImg[NoNullEigs,2] * tmp)
   # SheetnessImage *= EigsImg[:,:,:,2] ScaleObjectnessMeasureOff
-  SheetnessImage *= ( 1 - np.exp(-RsImg[:,:,:,3] * RsImg[:,:,:,3] * 4) )
-  SheetnessImage = itk.GetImageFromArray(SheetnessImage)
+  SheetnessImage[NoNullEigs] *= ( 1 - np.exp(-RsImg[NoNullEigs,3] * RsImg[NoNullEigs,3] * 4) )
+  # SheetnessImage = itk.GetImageFromArray(SheetnessImage)
   return SheetnessImage
+
 
 
 
@@ -128,7 +129,6 @@ def singlescaleSheetness(singleScaleInput,
                          alpha = 0.5,
                          beta = 0.5,
                          gamma = 0.5):
-
   print("Computing single-scale sheetness, sigma=%4.2f"% scale)
   HessImg = computeHessian(HessInput = singleScaleInput,
                            sigma = scale,
@@ -146,30 +146,32 @@ def singlescaleSheetness(singleScaleInput,
 
 
 
-
 def multiscaleSheetness(multiScaleInput,
                         scales,
                         HessImageType,
                         alpha = 0.5,
                         beta = 0.5,
                         gamma = 0.5):
-  multiscaleSheetness = singlescaleSheetness(multiScaleInput,
-                                             scales[0],
-                                             HessImageType,
+  multiscaleSheetness = singlescaleSheetness(singleScaleInput = multiScaleInput,
+                                             scale = scales[0],
+                                             HessImageType = HessImageType,
                                              alpha = alpha,
                                              beta = beta,
                                              gamma = gamma)
+
   if len(scales) > 1:
     for scale in scales[1:]:
-      singlescaleSheetness(multiScaleInput,
-                           scale,
-                           HessImageType,
-                           alpha = alpha,
-                           beta = beta,
-                           gamma = gamma)
-  else:
-    return
-
+      singleScaleSheetness  = singlescaleSheetness(multiScaleInput,
+                                                   scale,
+                                                   HessImageType,
+                                                   alpha = alpha,
+                                                   beta = beta,
+                                                   gamma = gamma)
+      refinement = abs(singleScaleSheetness) > abs(multiscaleSheetness)
+      multiscaleSheetness[refinement] = singleScaleSheetness[refinement]
+  multiscaleSheetness = itk.GetImageFromArray(multiscaleSheetness)
+  return multiscaleSheetness
+#%%
 
 
 
@@ -187,6 +189,9 @@ def binaryThresholding(inputImage,
   thresholder.SetOutsideValue(outsideValue)
   thresholder.Update()
   return thresholder.GetOutput()
+
+
+
 
 
 if __name__ == "__main__":
@@ -211,10 +216,11 @@ if __name__ == "__main__":
   inputCT, Inputmetadata = dicomsTo3D(DicomDir, ShortType)
 
   # Preprocessing
+  print("Thresholding input image")
   thresholdedInputCT = thresholding(inputCT, lowerThreshold, upperThreshold)
   smallScaleSheetnessImage = multiscaleSheetness(castImage(thresholdedInputCT, OutputType=FloatImageType),
-                                                 Scales,
-                                                 FloatImageType)
+                                                 scales = [sigmaSmallScale],
+                                                 HessImageType = FloatImageType)
 
 
 
