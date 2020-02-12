@@ -2,7 +2,7 @@ import itk
 import numpy as np
 import ctypes
 import matplotlib.pylab as plb
-
+from scipy.ndimage.morphology import distance_transform_cdt
 
 
 # Read a dicom series in a directory and turn it into a 3D image
@@ -126,6 +126,7 @@ def computeHessian(HessInput,
 def singlescaleSheetness(singleScaleInput,
                          scale,
                          HessImageType,
+                         roi = None,
                          alpha = 0.5,
                          beta = 0.5,
                          gamma = 0.5):
@@ -140,6 +141,9 @@ def singlescaleSheetness(singleScaleInput,
                                          alpha = alpha,
                                          beta = beta,
                                          gamma = gamma)
+
+  if not roi is None:
+    SheetnessImg[roi==0] = 0.
   return SheetnessImg
 
 
@@ -149,12 +153,16 @@ def singlescaleSheetness(singleScaleInput,
 def multiscaleSheetness(multiScaleInput,
                         scales,
                         HessImageType,
+                        roi = None,
                         alpha = 0.5,
                         beta = 0.5,
                         gamma = 0.5):
+  if not roi is None:
+    roi = itk.GetArrayFromImage(roi)
   multiscaleSheetness = singlescaleSheetness(singleScaleInput = multiScaleInput,
                                              scale = scales[0],
                                              HessImageType = HessImageType,
+                                             roi = roi,
                                              alpha = alpha,
                                              beta = beta,
                                              gamma = gamma)
@@ -162,26 +170,28 @@ def multiscaleSheetness(multiScaleInput,
   if len(scales) > 1:
     for scale in scales[1:]:
       singleScaleSheetness  = singlescaleSheetness(multiScaleInput,
-                                                   scale,
-                                                   HessImageType,
+                                                   scale = scale,
+                                                   HessImageType = HessImageType,
+                                                   roi = roi,
                                                    alpha = alpha,
                                                    beta = beta,
                                                    gamma = gamma)
       refinement = abs(singleScaleSheetness) > abs(multiscaleSheetness)
       multiscaleSheetness[refinement] = singleScaleSheetness[refinement]
-  multiscaleSheetness = itk.GetImageFromArray(multiscaleSheetness)
+  multiscaleSheetness = itk.GetImageFromArray(multiscaleSheetness.astype(np.float32))
   return multiscaleSheetness
-#%%
-
 
 
 def binaryThresholding(inputImage,
                        lowerThreshold,
                        upperThreshold,
-                       insideValue,
-                       outsideValue,
-                       ImageType):
-  itk.BinaryThresholdImageFilter[].New()
+                       outputImageType = None,
+                       insideValue = 1,
+                       outsideValue = 0):
+  s,d = itk.template(inputImage)[1]
+  input_type = itk.Image[s,d]
+  output_type = input_type if outputImageType is None else itk.Image[outputImageType,d]
+  thresholder = itk.BinaryThresholdImageFilter[input_type, output_type].New()
   thresholder.SetInput(inputImage)
   thresholder.SetLowerThreshold( lowerThreshold )
   thresholder.SetUpperThreshold( upperThreshold )
@@ -191,10 +201,90 @@ def binaryThresholding(inputImage,
   return thresholder.GetOutput()
 
 
+def ConnectedComponents(inputImage,
+                        outputImageType = None):
+  s,d = itk.template(inputImage)[1]
+  input_type = itk.Image[s,d]
+  output_type = input_type if outputImageType is None else itk.Image[outputImageType,d]
+  CC = itk.ConnectedComponentImageFilter[input_type, output_type].New()
+  CC.SetInput(inputImage)
+  CC.Update()
+  return CC.GetOutput()
 
+
+def RelabelComponents(inputImage,
+                      outputImageType = None):
+  s,d = itk.template(inputImage)[1]
+  input_type = itk.Image[s,d]
+  output_type = input_type if outputImageType is None else itk.Image[outputImageType,d]
+  relabel = itk.RelabelComponentImageFilter[input_type, output_type].New()
+  relabel.SetInput(inputImage)
+  relabel.Update()
+  return relabel.GetOutput()
+
+
+def Gaussian(GaussInput,
+             sigma,
+             outputImageType = None):
+  s,d = itk.template(GaussInput)[1]
+  input_type = itk.Image[s,d]
+  output_type = input_type if outputImageType is None else itk.Image[outputImageType,d]
+  OperationObj = itk.DiscreteGaussianImageFilter[input_type, output_type].New()
+  OperationObj.SetInput(GaussInput)
+  OperationObj.SetVariance(sigma)
+  OperationObj.Update()
+  return OperationObj.GetOutput()
+
+
+def substract(ImgA,
+              ImgB):
+  s,d = itk.template(ImgA)[1]
+  assert s,d == itk.template(ImgB)[1]
+  input_type = itk.Image[s,d]
+  Result = itk.SubtractImageFilter[input_type, input_type, input_type].New()
+  Result.SetInput1(ImgA)
+  Result.SetInput2(ImgB)
+  Result.Update()
+  return Result.GetOutput()
+
+
+def add(ImgA,
+        ImgB):
+  s,d = itk.template(ImgA)[1]
+  assert s,d == itk.template(ImgB)[1]
+  input_type = itk.Image[s,d]
+  Result = itk.AddImageFilter[input_type, input_type, input_type].New()
+  Result.SetInput1(ImgA)
+  Result.SetInput2(ImgB)
+  Result.Update()
+  return Result.GetOutput()
+
+
+def linearTransform(Img,
+                    scale,
+                    shift,
+                    outputImageType = None):
+  s,d = itk.template(Img)[1]
+  input_type = itk.Image[s,d]
+  output_type = input_type if outputImageType is None else itk.Image[outputImageType,d]
+  Result = itk.ShiftScaleImageFilter[input_type, output_type].New()
+  Result.SetInput(Img)
+  Result.SetScale(scale)
+  Result.SetShift(shift)
+  Result.Update()
+  return Result.GetOutput()
+
+
+#%%
+import matplotlib.pylab as plb
+def showSome(imgObj, idx = 0):
+  prova = itk.GetArrayFromImage(imgObj)
+  plb.imshow(prova[idx,:,:])
+#%%
 
 
 if __name__ == "__main__":
+#%%
   #
   # Add parser
   #
@@ -202,6 +292,7 @@ if __name__ == "__main__":
 
   # Parameters
   sigmaSmallScale = 1.5
+  sigmasLargeScale = [0.6, 0.8]
   lowerThreshold = 25
   upperThreshold = 600
 
@@ -210,10 +301,14 @@ if __name__ == "__main__":
 
   # Useful shortcut
   ShortType = itk.ctype('short')
-  FloatImageType = itk.Image[itk.ctype('float'),3]
+  UCType = itk.ctype('unsigned char')
+  FType = itk.ctype('float')
+  FloatImageType = itk.Image[FType,3]
 
   # Read Dicoms Series and turn it into 3D object
   inputCT, Inputmetadata = dicomsTo3D(DicomDir, ShortType)
+
+#%%
 
   # Preprocessing
   print("Thresholding input image")
@@ -221,6 +316,65 @@ if __name__ == "__main__":
   smallScaleSheetnessImage = multiscaleSheetness(castImage(thresholdedInputCT, OutputType=FloatImageType),
                                                  scales = [sigmaSmallScale],
                                                  HessImageType = FloatImageType)
+  print("Estimating soft-tissue voxels")
+  smScale = binaryThresholding(inputImage = smallScaleSheetnessImage,
+                               lowerThreshold = -0.05,
+                               upperThreshold = 0.05,
+                               outputImageType = UCType)
+  smScale = ConnectedComponents(inputImage = smScale,
+                                outputImageType = itk.ctype('unsigned long'))
+  smScale = RelabelComponents(inputImage = smScale,
+                              outputImageType = UCType)
+  softTissueEstimation = binaryThresholding(inputImage = smScale,
+                                            lowerThreshold = 1,
+                                            upperThreshold = 1)
+
+
+  print("Estimating bone voxels")
+  boneEstimation = itk.GetArrayFromImage(inputCT)
+  smScale = itk.GetArrayFromImage(smallScaleSheetnessImage)
+  boneCondition = (boneEstimation > 400) | (boneEstimation > 250) & (smScale > 0.6)
+  boneEstimation[boneCondition] = 1
+  boneEstimation[np.logical_not(boneCondition)] = 0
+  print("Computing ROI from bone estimation using Chamfer Distance")
+  boneDist = distance_transform_cdt(boneEstimation,
+                                    metric='manhattan',
+                                    return_distances=True).astype(np.float32)
+  boneDist = itk.GetImageFromArray(boneDist)
+  autoROI  = binaryThresholding(inputImage = boneDist,
+                                lowerThreshold = 0,
+                                upperThreshold = 30,
+                                outputImageType = UCType)
+
+
+  print("Unsharp masking")
+  InputCT_float = castImage(inputCT, OutputType=FloatImageType)
+  # I*G (discrete gauss)
+  m_DiffusionFilter = Gaussian(GaussInput = InputCT_float, sigma = 1.0)
+  # I - (I*G)
+  m_SubstractFilter = substract(InputCT_float, m_DiffusionFilter)
+  # k(I-(I*G))
+  m_MultiplyFilter = linearTransform(m_SubstractFilter,
+                                     scale = 10.,
+                                     shift = 0.)
+  # I+k*(I-(I*G))
+  inputCTUnsharpMasked = add(InputCT_float, m_MultiplyFilter)
+  print("Computing multiscale sheetness measure at %d scales" % len(sigmasLargeScale))
+  Sheetness = multiscaleSheetness(inputCTUnsharpMasked,
+                                  scales = sigmasLargeScale,
+                                  HessImageType = FloatImageType,
+                                  roi = autoROI)
+#%%
+  # Pre-Processing Done.
+
+
+
+
+  print(autoROI, Sheetness, softTissueEstimation)
+
+
+
+
 
 
 
