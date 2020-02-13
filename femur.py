@@ -55,14 +55,20 @@ def castImage(imgObj, OutputType):
 
 
 def computeRs(RsInputImg,
-              threshold = 1e-2):
-  eigenvalues_matrix = np.abs(itk.GetArrayFromImage(RsInputImg))
+              # threshold = 1e-4,
+              roi = None):
+  eigenvalues_matrix = np.abs(RsInputImg)
   eigenvalues_matrix[:,:,:,:3] = np.sort(eigenvalues_matrix[:,:,:,:3])
   det_image = np.sum(eigenvalues_matrix, axis=-1)
-  mean_norm = 1. / np.mean(det_image)
+  if not roi is None:
+    inside = roi!=0
+    mean_norm = 1. / np.mean(det_image[inside])
+  else:
+    mean_norm = 1. / np.mean(det_image)
   Rnoise = det_image*mean_norm
   RsImage = np.empty(eigenvalues_matrix.shape[:-1] + (4,), dtype=float)
-  al3_null = eigenvalues_matrix[:,:,:,2] > threshold
+  # al3_null = eigenvalues_matrix[:,:,:,2] > threshold
+  al3_null = eigenvalues_matrix[:,:,:,2] != 0
   eigs = eigenvalues_matrix[al3_null,:3]
   tmp = 1./(eigs[:,1]*eigs[:,2])
   RsImage[al3_null, 0] = eigs[:,0]*tmp # Rtube
@@ -76,12 +82,27 @@ def computeRs(RsInputImg,
 
 
 def computeSheetnessMeasure(SheetMeasInput,
+                            roi = None,
                             alpha = 0.5,
                             beta = 0.5,
                             gamma = 0.5):
-  RsImg, EigsImg, NoNullEigs = computeRs(RsInputImg = SheetMeasInput)
+  if isinstance(SheetMeasInput, np.ndarray):
+    sortedEigs = SheetMeasInput
+    RsImg, EigsImg, NoNullEigs = computeRs(RsInputImg = SheetMeasInput, roi=roi)
+  else:
+    sortedEigs = itk.GetArrayFromImage(SheetMeasInput)
+    # Sort them by abs
+    l1, l2, l3 = sortedEigs[:,:,:,0], sortedEigs[:,:,:,1], sortedEigs[:,:,:,2]
+    condA = np.abs(l1) > np.abs(l2)
+    l1[condA], l2[condA] = l2[condA], l1[condA]
+    condB = np.abs(l2) > np.abs(l3)
+    l2[condB], l3[condB] = l3[condB], l2[condB]
+    condC = np.abs(l1) > np.abs(l2)
+    l1[condC], l2[condC] = l2[condC], l1[condC]
+    sortedEigs[:,:,:,0], sortedEigs[:,:,:,1], sortedEigs[:,:,:,2] = l1, l2, l3
+    RsImg, EigsImg, NoNullEigs = computeRs(RsInputImg = sortedEigs, roi=roi)
   SheetnessImage = np.empty(EigsImg.shape[:-1], dtype=float)
-  SheetnessImage[NoNullEigs] = - np.sign( EigsImg[NoNullEigs,2] )
+  SheetnessImage[NoNullEigs] = - np.sign( sortedEigs[NoNullEigs,2] )
   tmp = 1. / (beta*beta)
   SheetnessImage[NoNullEigs] *= np.exp(-RsImg[NoNullEigs,0] * RsImg[NoNullEigs,0] * tmp)
   tmp = 1. / (alpha*alpha)
@@ -96,20 +117,92 @@ def computeSheetnessMeasure(SheetMeasInput,
 
 
 
-def computeEigenvalues(HessianObj,
+def computeEigenvalues(SmoothImg,
                        EigType,
                        D = 3):
-  HessianImageType = type(HessianObj)
+  HessianImageType = type(SmoothImg)
   EigenValueArrayType = itk.FixedArray[EigType, D]
   EigenValueImageType = itk.Image[EigenValueArrayType, D]
   EigenAnalysisFilterType = itk.SymmetricEigenAnalysisImageFilter[HessianImageType]
 
   m_EigenAnalysisFilter = EigenAnalysisFilterType.New()
   m_EigenAnalysisFilter.SetDimension(D)
-  m_EigenAnalysisFilter.SetInput(HessianObj)
+  m_EigenAnalysisFilter.SetInput(SmoothImg)
   m_EigenAnalysisFilter.Update()
 
   return m_EigenAnalysisFilter.GetOutput()
+
+
+# M11, M12, M13, M22, M23, M33=hxx, hxy, hxz, hyy, hyz, hzz
+def GetEigenValues(M11, M12, M13, M22, M23, M33, roi=None):
+  # Select roi
+  if not roi is None:
+    inside = roi!=0
+    M11, M12, M13, M22, M23, M33 = M11[inside], M12[inside], M13[inside], M22[inside], M23[inside], M33[inside]
+  a = -1.
+  b = M11 + M22 + M33
+  t12, t13, t23, s23 = M12*M12, M13*M13, M23*M23, M22*M33
+  c = t12 + t13 + t23 - M11*(M22+M33) - s23
+  d = M11*(s23 - t23) - M33*t12 + 2.*M12*M13*M23 - M22*t13
+  x = ( (-3.*c) - (b*b) )
+  tmpa = 1./3.
+  x *= tmpa
+  y = ((-2.*b*b*b) - (9.0*b*c) + (27.0*d/a))
+  tmp = 1./27.
+  y *= tmp
+  z = y*y*0.25+x*x*x*tmp
+  i = np.sqrt(y*y*0.25-z)
+  j = -np.power(i, tmpa)
+  k = np.arccos(-y/(2.0*i))
+  m = np.cos(k*tmpa)
+  n = np.sqrt(3.0)*np.sin(k*tmpa)
+  p = -(b/(3.0*a))
+  l1 = -2.0*j*m + p
+  l2 = j*(m + n) + p
+  l3 = j*(m - n) + p
+  l1[np.isnan(l1)] = 0.
+  l2[np.isnan(l2)] = 0.
+  l3[np.isnan(l3)] = 0.
+  condA = np.abs(l1) > np.abs(l2)
+  l1[condA], l2[condA] = l2[condA], l1[condA]
+  condB = np.abs(l2) > np.abs(l3)
+  l2[condB], l3[condB] = l3[condB], l2[condB]
+  condC = np.abs(l1) > np.abs(l2)
+  l1[condC], l2[condC] = l2[condC], l1[condC]
+  EigenValues = np.zeros(M11.shape + (4,))
+  if not roi is None:
+    EigenValues[inside,0] = l1
+    EigenValues[inside,1] = l2
+    EigenValues[inside,2] = l3
+  else:
+    EigenValues[:,:,:,0] = l1
+    EigenValues[:,:,:,1] = l2
+    EigenValues[:,:,:,2] = l3
+  return EigenValues
+
+
+
+
+def computeQuasiHessian(SmoothImg):
+  SRImg = itk.GetArrayFromImage(SmoothImg)
+  PaddedImg = np.pad(SRImg, 2,'edge')
+  # Computing Values
+  tmp = 2. * PaddedImg[2:-2,2:-2,2:-2]
+  hxx = PaddedImg[2:-2,2:-2,:-4] - tmp + PaddedImg[2:-2,2:-2,4:] # ((-2,0,0) - 2*(0,0,0) + (2,0,0))/4.
+  hyy = PaddedImg[2:-2,:-4,2:-2] - tmp + PaddedImg[2:-2,4:,2:-2] # ((0,-2,0) - 2*(0,0,0) + (0,2,0))/4.
+  hzz = PaddedImg[:-4,2:-2,2:-2] - tmp + PaddedImg[4:,2:-2,2:-2] # ((0,0,-2) - 2*(0,0,0) + (0,0,2))/4.
+  hxy = PaddedImg[2:-2,1:-3,1:-3] - PaddedImg[2:-2,1:-3,3:-1] - PaddedImg[2:-2,3:-1,1:-3] + PaddedImg[2:-2,3:-1, 3:-1] # ((-1,-1,0) - (1,-1,0) - (-1,1,0) + (1,1,0))/4.
+  hxz = PaddedImg[1:-3,2:-2,1:-3] - PaddedImg[1:-3,2:-2,3:-1] - PaddedImg[3:-1,2:-2,1:-3] + PaddedImg[3:-1,2:-2, 3:-1] # ((-1,-1,0) - (1,-1,0) - (-1,1,0) + (1,1,0))/4.
+  hyz = PaddedImg[1:-3,1:-3,2:-2] - PaddedImg[1:-3,3:-1,2:-2] - PaddedImg[3:-1,1:-3,2:-2] + PaddedImg[3:-1,3:-1,2:-2] # ((-1,-1,0) - (1,-1,0) - (-1,1,0) + (1,1,0))/4.
+  # Division over 4
+  hxx *= 0.25
+  hyy *= 0.25
+  hzz *= 0.25
+  hxy *= 0.25
+  hxz *= 0.25
+  hyz *= 0.25
+  return hxx, hxy, hxz, hyy, hyz, hzz
+
 
 
 def computeHessian(HessInput,
@@ -123,21 +216,39 @@ def computeHessian(HessInput,
   return HessianObj.GetOutput()
 
 
+def SmoothingRecursive(SRInput,
+                       sigma,
+                       SRImageType):
+  SRFilterType = itk.SmoothingRecursiveGaussianImageFilter[SRImageType, SRImageType]
+  SRObj = SRFilterType.New()
+  SRObj.SetInput(SRInput)
+  SRObj.SetSigma(sigma)
+  SRObj.Update()
+  return SRObj.GetOutput()
+
+
 def singlescaleSheetness(singleScaleInput,
                          scale,
-                         HessImageType,
+                         SmoothingImageType,
                          roi = None,
                          alpha = 0.5,
                          beta = 0.5,
                          gamma = 0.5):
   print("Computing single-scale sheetness, sigma=%4.2f"% scale)
-  HessImg = computeHessian(HessInput = singleScaleInput,
-                           sigma = scale,
-                           HRGImageType = HessImageType)
-  EigenImg = computeEigenvalues(HessianObj = HessImg,
+
+  # SmoothImg = SmoothingRecursive(SRInput = singleScaleInput,
+  #                                sigma = scale,
+  #                                SRImageType = SmoothingImageType)
+  # HessianMatrices = computeQuasiHessian(SmoothImg)
+  # EigenImg = GetEigenValues(*HessianMatrices, roi)
+  SmoothImg = computeHessian(HessInput = singleScaleInput,
+                             sigma = scale,
+                             HRGImageType = SmoothingImageType)
+  EigenImg = computeEigenvalues(SmoothImg = SmoothImg,
                                 EigType = itk.ctype('float'),
                                 D = 3)
   SheetnessImg = computeSheetnessMeasure(SheetMeasInput = EigenImg,
+                                         roi = roi,
                                          alpha = alpha,
                                          beta = beta,
                                          gamma = gamma)
@@ -152,7 +263,7 @@ def singlescaleSheetness(singleScaleInput,
 
 def multiscaleSheetness(multiScaleInput,
                         scales,
-                        HessImageType,
+                        SmoothingImageType,
                         roi = None,
                         alpha = 0.5,
                         beta = 0.5,
@@ -161,7 +272,7 @@ def multiscaleSheetness(multiScaleInput,
     roi = itk.GetArrayFromImage(roi)
   multiscaleSheetness = singlescaleSheetness(singleScaleInput = multiScaleInput,
                                              scale = scales[0],
-                                             HessImageType = HessImageType,
+                                             SmoothingImageType = SmoothingImageType,
                                              roi = roi,
                                              alpha = alpha,
                                              beta = beta,
@@ -171,7 +282,7 @@ def multiscaleSheetness(multiScaleInput,
     for scale in scales[1:]:
       singleScaleSheetness  = singlescaleSheetness(multiScaleInput,
                                                    scale = scale,
-                                                   HessImageType = HessImageType,
+                                                   SmoothingImageType = SmoothingImageType,
                                                    roi = roi,
                                                    alpha = alpha,
                                                    beta = beta,
@@ -308,14 +419,15 @@ if __name__ == "__main__":
   # Read Dicoms Series and turn it into 3D object
   inputCT, Inputmetadata = dicomsTo3D(DicomDir, ShortType)
 
+  print("Preprocessing")
 #%%
 
   # Preprocessing
   print("Thresholding input image")
-  thresholdedInputCT = thresholding(inputCT, lowerThreshold, upperThreshold)
-  smallScaleSheetnessImage = multiscaleSheetness(castImage(thresholdedInputCT, OutputType=FloatImageType),
+  thresholdedInputCT = thresholding(inputCT, lowerThreshold, upperThreshold) # Checked
+  smallScaleSheetnessImage = multiscaleSheetness(multiScaleInput = castImage(thresholdedInputCT, OutputType=FloatImageType),
                                                  scales = [sigmaSmallScale],
-                                                 HessImageType = FloatImageType)
+                                                 SmoothingImageType = FloatImageType)
   print("Estimating soft-tissue voxels")
   smScale = binaryThresholding(inputImage = smallScaleSheetnessImage,
                                lowerThreshold = -0.05,
@@ -337,7 +449,7 @@ if __name__ == "__main__":
   boneEstimation[boneCondition] = 1
   boneEstimation[np.logical_not(boneCondition)] = 0
   print("Computing ROI from bone estimation using Chamfer Distance")
-  boneDist = distance_transform_cdt(boneEstimation,
+  boneDist = distance_transform_cdt(boneEstimation.astype(np.int32),
                                     metric='manhattan',
                                     return_distances=True).astype(np.float32)
   boneDist = itk.GetImageFromArray(boneDist)
@@ -345,8 +457,6 @@ if __name__ == "__main__":
                                 lowerThreshold = 0,
                                 upperThreshold = 30,
                                 outputImageType = UCType)
-
-
   print("Unsharp masking")
   InputCT_float = castImage(inputCT, OutputType=FloatImageType)
   # I*G (discrete gauss)
@@ -362,7 +472,7 @@ if __name__ == "__main__":
   print("Computing multiscale sheetness measure at %d scales" % len(sigmasLargeScale))
   Sheetness = multiscaleSheetness(inputCTUnsharpMasked,
                                   scales = sigmasLargeScale,
-                                  HessImageType = FloatImageType,
+                                  SmoothingImageType = FloatImageType,
                                   roi = autoROI)
 #%%
   # Pre-Processing Done.
@@ -373,9 +483,53 @@ if __name__ == "__main__":
   print(autoROI, Sheetness, softTissueEstimation)
 
 
+# Ok: cpp_thresholded = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/thresholdedInputCT.nii", t = 'short')
+# Ok: cpp_thresholdedCast = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/thresholdedInputCT_short.nii", t = 'float')
+# Ok within float precision: cpp_SmoothingA = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/SmoothinRecursive1.500000.nii", t= 'float')
+# Ok within float precision: cpp_smallScaleSheetnessImage = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/smallScaleSheetnessImage.nii", t= 'float')
+cpp_soft = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/soft-tissue-est.nii")
+cpp_boneEstimation = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/boneEstimation.nii")
+cpp_chamferResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/chamferResult.nii", t = 'float')
+cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
+
+np.unique(prova_cpp)
+
+
+import os
+os.listdir("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/")
+
+
+prova_me = itk.GetArrayFromImage(boneDist)
+prova_cpp = itk.GetArrayFromImage(cpp_chamferResult)
+showSome(boneDist,50)
+showSome(cpp_chamferResult,50)
+np.unique(prova_me == prova_cpp)
+np.unique(prova_me).max()
+np.unique(prova_cpp).max()
+np.unique(prova_me).min()
+np.unique(prova_cpp).min()
+np.unique(prova_me)
 
 
 
+
+prova = distance_transform_cdt(itk.GetArrayFromImage(cpp_boneEstimation).astype(np.int32),
+                                  metric='manhattan',
+                                  return_distances=True).astype(np.float32)
+
+np.unique(prova)
+
+
+
+def Read3DNifti(fn, t = 'unsigned char'):
+  nifti_obj = itk.NiftiImageIO.New()
+  set_type = itk.ctype(t)
+  reader_type = itk.Image[set_type,3]
+  reader = itk.ImageFileReader[reader_type].New()
+  reader.SetFileName(fn)
+  reader.SetImageIO(nifti_obj)
+  reader.Update()
+  return reader.GetOutput()
 
 
 ###########
