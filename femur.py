@@ -391,6 +391,17 @@ import matplotlib.pylab as plb
 def showSome(imgObj, idx = 0):
   prova = itk.GetArrayFromImage(imgObj)
   plb.imshow(prova[idx,:,:])
+
+def Read3DNifti(fn, t = 'unsigned char'):
+  nifti_obj = itk.NiftiImageIO.New()
+  set_type = itk.ctype(t)
+  reader_type = itk.Image[set_type,3]
+  reader = itk.ImageFileReader[reader_type].New()
+  reader.SetFileName(fn)
+  reader.SetImageIO(nifti_obj)
+  reader.Update()
+  return reader.GetOutput()
+
 #%%
 
 
@@ -422,12 +433,19 @@ if __name__ == "__main__":
   print("Preprocessing")
 #%%
 
+  showSome(inputCT,50)
+
   # Preprocessing
   print("Thresholding input image")
   thresholdedInputCT = thresholding(inputCT, lowerThreshold, upperThreshold) # Checked
+
+  showSome(thresholdedInputCT, 50)
   smallScaleSheetnessImage = multiscaleSheetness(multiScaleInput = castImage(thresholdedInputCT, OutputType=FloatImageType),
                                                  scales = [sigmaSmallScale],
                                                  SmoothingImageType = FloatImageType)
+
+  showSome(smallScaleSheetnessImage,50)
+
   print("Estimating soft-tissue voxels")
   smScale = binaryThresholding(inputImage = smallScaleSheetnessImage,
                                lowerThreshold = -0.05,
@@ -440,7 +458,7 @@ if __name__ == "__main__":
   softTissueEstimation = binaryThresholding(inputImage = smScale,
                                             lowerThreshold = 1,
                                             upperThreshold = 1)
-
+  showSome(softTissueEstimation, 50)
 
   print("Estimating bone voxels")
   boneEstimation = itk.GetArrayFromImage(inputCT)
@@ -449,9 +467,9 @@ if __name__ == "__main__":
   boneEstimation[boneCondition] = 1
   boneEstimation[np.logical_not(boneCondition)] = 0
   print("Computing ROI from bone estimation using Chamfer Distance")
-  boneDist = distance_transform_cdt(boneEstimation.astype(np.int32),
-                                    metric='manhattan',
-                                    return_distances=True).astype(np.float32)
+  boneDist = distance_transform_cdt(boneEstimation.astype(np.int64),
+                                    metric='taxicab',
+                                    return_distances=True).astype(np.float64)
   boneDist = itk.GetImageFromArray(boneDist)
   autoROI  = binaryThresholding(inputImage = boneDist,
                                 lowerThreshold = 0,
@@ -483,6 +501,16 @@ if __name__ == "__main__":
   print(autoROI, Sheetness, softTissueEstimation)
 
 
+
+
+
+
+####################
+# WORK IN PROGRESS #
+####################
+#%%
+import os
+os.listdir("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/")
 # Ok: cpp_thresholded = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/thresholdedInputCT.nii", t = 'short')
 # Ok: cpp_thresholdedCast = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/thresholdedInputCT_short.nii", t = 'float')
 # Ok within float precision: cpp_SmoothingA = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/SmoothinRecursive1.500000.nii", t= 'float')
@@ -492,17 +520,13 @@ cpp_boneEstimation = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/
 cpp_chamferResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/chamferResult.nii", t = 'float')
 cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
 
-np.unique(prova_cpp)
 
+plb.imshow(boneEstimation[50,:,:])
 
-import os
-os.listdir("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/")
-
-
-prova_me = itk.GetArrayFromImage(boneDist)
-prova_cpp = itk.GetArrayFromImage(cpp_chamferResult)
+prova_me = itk.GetArrayFromImage()
+prova_cpp = itk.GetArrayFromImage(cpp_boneEstimation)
 showSome(boneDist,50)
-showSome(cpp_chamferResult,50)
+showSome(cpp_boneEstimation,50)
 np.unique(prova_me == prova_cpp)
 np.unique(prova_me).max()
 np.unique(prova_cpp).max()
@@ -511,25 +535,52 @@ np.unique(prova_cpp).min()
 np.unique(prova_me)
 
 
+#%%
+# CHAMFER DISTANCE - MANHATTAN
+
+def addToTemplateIfPositiveWeight(templ, x, y, z, weight):
+  return templ if weight < 0.1 else templ + [[x,y,z, weight]]
+
+ChamferInput = boneEstimation
+distanceMap = np.zeros(ChamferInput.shape)
+_infinityDistance = np.sum(ChamferInput.shape) + 1
+distanceMap[ChamferInput == 0] = _infinityDistance
+a, b, c = 1., 0., 0. # MANHATTEN
+
+templ = addToTemplateIfPositiveWeight([], -1,  0,  0, a)
+templ = addToTemplateIfPositiveWeight(templ, 0, -1,  0, a)
+templ = addToTemplateIfPositiveWeight(templ, -1, -1,  0, b)
+templ = addToTemplateIfPositiveWeight(templ, -1, +1,  0, b)
+templ = addToTemplateIfPositiveWeight(templ, 0,  0, -1, a)
+templ = addToTemplateIfPositiveWeight(templ, -1,  0, -1, b)
+templ = addToTemplateIfPositiveWeight(templ, +1,  0, -1, b)
+templ = addToTemplateIfPositiveWeight(templ, 0, -1, -1, b)
+templ = addToTemplateIfPositiveWeight(templ, 0, +1, -1, b)
+templ = addToTemplateIfPositiveWeight(templ, -1, -1, -1, c)
+templ = addToTemplateIfPositiveWeight(templ, -1, +1, -1, c)
+templ = addToTemplateIfPositiveWeight(templ, +1, -1, -1, c)
+templ = addToTemplateIfPositiveWeight(templ, +1, +1, -1, c)
+templ = np.asarray(templ)
+offsets = templ[:, :-1].astype(np.int)
+
+prova = np.array( [[1,2,3,4,5], [6,7,8,9,10], [11,12,13,14,15],
+                   [16,17,18,19,20], [21,22,23,24,25]] )
+
+provaPad = np.pad(prova, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
+
+offset = offsets[0]
+provaPad[1:-1,:-2], provaPad[1:-1,1:-1]
+
+distanceMapPad = np.pad(distanceMap, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
+minDistance = np.minimum(distanceMap, distanceMapPad[1:-1,1:-1,:-2]+1) # offset 0
+minDistance = np.minimum(minDistance, distanceMapPad[1:-1,:-2,1:-1]+1) # offset 1
+minDistance = np.minimum(minDistance, distanceMapPad[:-2,1:-1,1:-1]+1) # offset 2
+
+for index, value in np.ndenumerate(distanceMap):
+  distanceMapPad[index] = np.min([value,distanceMapPad[index[0],index[1],index[2]-1], distanceMapPad[index[0],index[1]-1,index[2]], distanceMapPad[index[0]-1,index[1],index[2]]])
 
 
-prova = distance_transform_cdt(itk.GetArrayFromImage(cpp_boneEstimation).astype(np.int32),
-                                  metric='manhattan',
-                                  return_distances=True).astype(np.float32)
-
-np.unique(prova)
-
-
-
-def Read3DNifti(fn, t = 'unsigned char'):
-  nifti_obj = itk.NiftiImageIO.New()
-  set_type = itk.ctype(t)
-  reader_type = itk.Image[set_type,3]
-  reader = itk.ImageFileReader[reader_type].New()
-  reader.SetFileName(fn)
-  reader.SetImageIO(nifti_obj)
-  reader.Update()
-  return reader.GetOutput()
+#%%
 
 
 ###########
