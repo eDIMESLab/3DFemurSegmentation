@@ -397,6 +397,7 @@ def DistanceTransform(ChamferInput):
   distanceMap[ChamferInput == 0] = _infinityDistance
   distanceMapPad = np.pad(distanceMap, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
   distanceMap = fast_distance_matrix.ManhattanChamferDistance(distanceMapPad, distanceMap.shape)
+  distanceMap = distanceMap[1:-1, 1:-1, 1:-1].copy()
   return distanceMap
 
 
@@ -484,7 +485,7 @@ if __name__ == "__main__":
   # boneDist = distance_transform_cdt(boneEstimation.astype(np.int64),
   #                                   metric='taxicab',
   #                                   return_distances=True).astype(np.float64)
-  boneDist = DistanceTransform(boneEstimation.astype(np.float64))
+  boneDist = DistanceTransform(boneEstimation.astype(np.int32)).astype(np.float32)
   boneDist = itk.GetImageFromArray(boneDist)
   autoROI  = binaryThresholding(inputImage = boneDist,
                                 lowerThreshold = 0,
@@ -530,22 +531,22 @@ os.listdir("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/
 # Ok: cpp_thresholdedCast = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/thresholdedInputCT_short.nii", t = 'float')
 # Ok within float precision: cpp_SmoothingA = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/SmoothinRecursive1.500000.nii", t= 'float')
 # Ok within float precision: cpp_smallScaleSheetnessImage = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/smallScaleSheetnessImage.nii", t= 'float')
-cpp_soft = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/soft-tissue-est.nii")
-cpp_boneEstimation = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/boneEstimation.nii")
-cpp_chamferResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/chamferResult.nii", t = 'float')
-cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
+# Ok within float precision: cpp_soft = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/soft-tissue-est.nii")
+# Ok within float precision: cpp_boneEstimation = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/boneEstimation.nii")
+# Ok within float precision: cpp_chamferResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/chamferResult.nii", t = 'float')
+# Ok within previous float precision: cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
+cpp_sheetness = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/sheetnessF.nii", t = 'float')
 
 
-prova_me = itk.GetArrayFromImage(boneDist)
-prova_cpp = itk.GetArrayFromImage(cpp_chamferResult)
-showSome(boneDist,1)
-showSome(cpp_chamferResult,1)
+prova_me = itk.GetArrayFromImage(autoROI)
+prova_cpp = itk.GetArrayFromImage(cpp_roi)
+showSome(autoROI,0)
+showSome(cpp_roi,0)
 np.unique(prova_me == prova_cpp)
 np.unique(prova_me).max()
-np.unique(F).max()
+np.unique(prova_cpp).max()
 np.unique(prova_me).min()
 np.unique(prova_cpp).min()
-np.unique(prova_cpp)
 
 
 #%%
