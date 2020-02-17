@@ -4,6 +4,8 @@ import ctypes
 import matplotlib.pylab as plb
 from scipy.ndimage.morphology import distance_transform_cdt
 
+import fast_distance_matrix
+
 
 # Read a dicom series in a directory and turn it into a 3D image
 def dicomsTo3D(dirname, ImageType):
@@ -385,6 +387,13 @@ def linearTransform(Img,
   Result.Update()
   return Result.GetOutput()
 
+def DistanceTransform(ChamferInput):
+  distanceMap = np.zeros(ChamferInput.shape)
+  _infinityDistance = np.sum(ChamferInput.shape) + 1
+  distanceMap[ChamferInput == 0] = _infinityDistance
+  distanceMapPad = np.pad(distanceMap, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
+  distanceMap = fast_distance_matrix.ManhattanChamferDistance(distanceMapPad, distanceMap.shape)
+  return distanceMap
 
 #%%
 import matplotlib.pylab as plb
@@ -467,9 +476,10 @@ if __name__ == "__main__":
   boneEstimation[boneCondition] = 1
   boneEstimation[np.logical_not(boneCondition)] = 0
   print("Computing ROI from bone estimation using Chamfer Distance")
-  boneDist = distance_transform_cdt(boneEstimation.astype(np.int64),
-                                    metric='taxicab',
-                                    return_distances=True).astype(np.float64)
+  # boneDist = distance_transform_cdt(boneEstimation.astype(np.int64),
+  #                                   metric='taxicab',
+  #                                   return_distances=True).astype(np.float64)
+  boneDist = DistanceTransform(boneEstimation.astype(np.float64))
   boneDist = itk.GetImageFromArray(boneDist)
   autoROI  = binaryThresholding(inputImage = boneDist,
                                 lowerThreshold = 0,
@@ -536,48 +546,12 @@ np.unique(prova_me)
 
 
 #%%
-# CHAMFER DISTANCE - MANHATTAN
 
-def addToTemplateIfPositiveWeight(templ, x, y, z, weight):
-  return templ if weight < 0.1 else templ + [[x,y,z, weight]]
 
-ChamferInput = boneEstimation
-distanceMap = np.zeros(ChamferInput.shape)
-_infinityDistance = np.sum(ChamferInput.shape) + 1
-distanceMap[ChamferInput == 0] = _infinityDistance
-a, b, c = 1., 0., 0. # MANHATTEN
 
-templ = addToTemplateIfPositiveWeight([], -1,  0,  0, a)
-templ = addToTemplateIfPositiveWeight(templ, 0, -1,  0, a)
-templ = addToTemplateIfPositiveWeight(templ, -1, -1,  0, b)
-templ = addToTemplateIfPositiveWeight(templ, -1, +1,  0, b)
-templ = addToTemplateIfPositiveWeight(templ, 0,  0, -1, a)
-templ = addToTemplateIfPositiveWeight(templ, -1,  0, -1, b)
-templ = addToTemplateIfPositiveWeight(templ, +1,  0, -1, b)
-templ = addToTemplateIfPositiveWeight(templ, 0, -1, -1, b)
-templ = addToTemplateIfPositiveWeight(templ, 0, +1, -1, b)
-templ = addToTemplateIfPositiveWeight(templ, -1, -1, -1, c)
-templ = addToTemplateIfPositiveWeight(templ, -1, +1, -1, c)
-templ = addToTemplateIfPositiveWeight(templ, +1, -1, -1, c)
-templ = addToTemplateIfPositiveWeight(templ, +1, +1, -1, c)
-templ = np.asarray(templ)
-offsets = templ[:, :-1].astype(np.int)
 
-prova = np.array( [[1,2,3,4,5], [6,7,8,9,10], [11,12,13,14,15],
-                   [16,17,18,19,20], [21,22,23,24,25]] )
 
-provaPad = np.pad(prova, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
 
-offset = offsets[0]
-provaPad[1:-1,:-2], provaPad[1:-1,1:-1]
-
-distanceMapPad = np.pad(distanceMap, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
-minDistance = np.minimum(distanceMap, distanceMapPad[1:-1,1:-1,:-2]+1) # offset 0
-minDistance = np.minimum(minDistance, distanceMapPad[1:-1,:-2,1:-1]+1) # offset 1
-minDistance = np.minimum(minDistance, distanceMapPad[:-2,1:-1,1:-1]+1) # offset 2
-
-for index, value in np.ndenumerate(distanceMap):
-  distanceMapPad[index] = np.min([value,distanceMapPad[index[0],index[1],index[2]-1], distanceMapPad[index[0],index[1]-1,index[2]], distanceMapPad[index[0]-1,index[1],index[2]]])
 
 
 #%%

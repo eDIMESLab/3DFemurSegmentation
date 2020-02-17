@@ -3,11 +3,11 @@
 cimport numpy as np
 
 
-def ManhattanChamferDistance(np.ndarray im, float w=1.):
+def ManhattanChamferDistance(np.ndarray im, tuple shape, float w=1.):
   cdef long z
   cdef long y
   cdef long x
-  z, y, x = im.shape[0], im.shape[1], im.shape[2]
+  z, y, x = shape[0], shape[1], shape[2]
   z += 1
   y += 1
   x += 1
