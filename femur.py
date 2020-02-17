@@ -3,7 +3,10 @@ import numpy as np
 import ctypes
 import matplotlib.pylab as plb
 from scipy.ndimage.morphology import distance_transform_cdt
-
+#%%
+import sys
+sys.path.append('/home/PERSONALE/daniele.dallolio3/3DFemurSegmentation')
+#%%
 import fast_distance_matrix
 
 
@@ -387,6 +390,7 @@ def linearTransform(Img,
   Result.Update()
   return Result.GetOutput()
 
+
 def DistanceTransform(ChamferInput):
   distanceMap = np.zeros(ChamferInput.shape)
   _infinityDistance = np.sum(ChamferInput.shape) + 1
@@ -394,6 +398,7 @@ def DistanceTransform(ChamferInput):
   distanceMapPad = np.pad(distanceMap, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
   distanceMap = fast_distance_matrix.ManhattanChamferDistance(distanceMapPad, distanceMap.shape)
   return distanceMap
+
 
 #%%
 import matplotlib.pylab as plb
@@ -531,18 +536,16 @@ cpp_chamferResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/b
 cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
 
 
-plb.imshow(boneEstimation[50,:,:])
-
-prova_me = itk.GetArrayFromImage()
-prova_cpp = itk.GetArrayFromImage(cpp_boneEstimation)
-showSome(boneDist,50)
-showSome(cpp_boneEstimation,50)
+prova_me = itk.GetArrayFromImage(boneDist)
+prova_cpp = itk.GetArrayFromImage(cpp_chamferResult)
+showSome(boneDist,1)
+showSome(cpp_chamferResult,1)
 np.unique(prova_me == prova_cpp)
 np.unique(prova_me).max()
-np.unique(prova_cpp).max()
+np.unique(F).max()
 np.unique(prova_me).min()
 np.unique(prova_cpp).min()
-np.unique(prova_me)
+np.unique(prova_cpp)
 
 
 #%%
