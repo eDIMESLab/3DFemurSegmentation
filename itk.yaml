@@ -1,0 +1,15 @@
+name: itk
+channels:
+  - conda-forge
+dependencies:
+  - python=3.8
+  - pip
+  - pandas
+  - numpy
+  - scipy
+  - matplotlib
+  - scikit-learn
+  - seaborn
+  - itk
+  - jupyter
+  - ipython
