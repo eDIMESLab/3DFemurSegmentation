@@ -1,12 +1,16 @@
 # Python implementation of Graph-cut based 3D Segmentation of Femur 
 
 <div content="" clear="both" display="table">
-  <div float="left" padding="5px" href="https://github.com/eDIMESLab">
+  <a href="https://github.com/eDIMESLab">
+  <div float="left" padding="5px" width="50%">
     <img src="https://avatars2.githubusercontent.com/u/58266717?s=200&v=4" width="90" height="90">
   </div>
-  <div float="left" padding="5px" href="https://github.com/UniboDIFABiophysics">
+  </a>
+  <a href="https://github.com/UniboDIFABiophysics">
+  <div float="left" padding="5px" width="50%">
     <img src="https://cdn.rawgit.com/physycom/templates/697b327d/logo_unibo.png" width="90" height="90">
   </div>
+  </a>
 </div>
 
 
