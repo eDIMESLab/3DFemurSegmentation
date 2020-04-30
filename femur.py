@@ -538,10 +538,10 @@ os.listdir("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/
 cpp_sheetness = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/sheetnessF.nii", t = 'float')
 
 
-prova_me = itk.GetArrayFromImage(autoROI)
-prova_cpp = itk.GetArrayFromImage(cpp_roi)
-showSome(autoROI,0)
-showSome(cpp_roi,0)
+prova_me = itk.GetArrayFromImage(Sheetness)
+prova_cpp = itk.GetArrayFromImage(cpp_sheetness)
+showSome(Sheetness,0)
+showSome(cpp_sheetness,0)
 np.unique(prova_me == prova_cpp)
 np.unique(prova_me).max()
 np.unique(prova_cpp).max()
@@ -550,11 +550,76 @@ np.unique(prova_cpp).min()
 
 
 #%%
+COST_AMPLIFIER = 1000
+# assignIdsToPixels
+intensity  = itk.GetArrayFromImage(inputCT)
+softTissue = itk.GetArrayFromImage(softTissueEstimation)
+sheetness  = itk.GetArrayFromImage(Sheetness)
+
+_pixelIdImage = np.zeros(intensity.shape)
+roi = itk.GetArrayFromImage(autoROI)
+_pixelIdImage[roi==0] = -1
+_totalPixelsInROI = np.sum(roi!=0)
+_pixelIdImage[roi!=0] = range(_totalPixelsInROI)
+
+
+# SheetnessBasedDataCost_compute:
+# - BONE, 0
+dataCostSource = np.zeros(intensity.shape)
+cond = (intensity < -500) | (softTissue == 1)
+dataCostSource[cond] = 1 * COST_AMPLIFIER
+# - TISSUE, 1
+dataCostSink = np.zeros(intensity.shape)
+cond = (intensity > 400) & (sheetness > 0)
+dataCostSink[cond] = 1 * COST_AMPLIFIER
+
+# SheetnessBasedSmoothCost_compute:
+def SheetnessBasedSmoothCost(pixelLeft,
+                             pixelRight,
+                             shtnLeft,
+                             shtnRight):
+  alpha = 5.0
+  cond = (pixelLeft > -1) & (pixelRight > -1)
+  smoothCostFromCenter = np.ones(pixelLeft[cond].shape)
+  smoothCostToCenter   = np.ones(pixelLeft[cond].shape)
+  dSheet = abs(shtnLeft[cond] - shtnRight[cond])
+  # From Center
+  cond_b = shtnLeft[cond] >= shtnRight[cond]
+  smoothCostFromCenter[cond_b] = np.exp(- 5. * dSheet[cond_b])
+  smoothCostFromCenter = smoothCostFromCenter * COST_AMPLIFIER * alpha + 1
+  # To Center
+  cond_b = np.logical_not(cond_b)
+  smoothCostToCenter[cond_b] = np.exp(- 5. * dSheet[cond_b])
+  smoothCostToCenter = smoothCostToCenter * COST_AMPLIFIER * alpha + 1
+  return pixelLeft[cond], smoothCostFromCenter, smoothCostToCenter
+
+Xcenters, XFromCenter, XToCenter = SheetnessBasedSmoothCost(pixelLeft  = _pixelIdImage[:, :, :-1],
+                                                            pixelRight = _pixelIdImage[:, :, 1:],
+                                                            shtnLeft  = sheetness[:,:,:-1],
+                                                            shtnRight = sheetness[:,:,1:])
+Ycenters, YFromCenter, YToCenter = SheetnessBasedSmoothCost(pixelLeft  = _pixelIdImage[:, :-1, :],
+                                                            pixelRight = _pixelIdImage[:, 1:, :],
+                                                            shtnLeft  = sheetness[:,:-1,:],
+                                                            shtnRight = sheetness[:,1:,:])
+Zcenters, ZFromCenter, ZToCenter = SheetnessBasedSmoothCost(pixelLeft  = _pixelIdImage[:-1,:,:],
+                                                            pixelRight = _pixelIdImage[1:,:,:],
+                                                            shtnLeft  = sheetness[:-1,:,:],
+                                                            shtnRight = sheetness[1:,:,:])
+_totalNeighbors = np.sum( [len(Xcenters), len(Ycenters), len(Zcenters)] )
+
+# _pixelIdImage[:, :-1, :], _pixelIdImage[:, 1:, :]
+# _pixelIdImage[:-1, :, :], _pixelIdImage[1:, :, :]
+
+prova = np.array([[1,2,3,4,5],
+                 [6,7,8,9,10],
+                 [11,12,13,14,15],
+                 [16,17,18,19,20],
+                 [21,22,23,24,25]]
+                 )
 
 
 
-
-
+# initializeDataCosts
 
 
 
