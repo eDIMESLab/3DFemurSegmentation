@@ -13,3 +13,4 @@ dependencies:
   - itk
   - jupyter
   - ipython
+  - cython
