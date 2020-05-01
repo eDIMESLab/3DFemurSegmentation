@@ -10,7 +10,7 @@ dependencies:
   - matplotlib
   - scikit-learn
   - seaborn
-  - itk
+  - itk=5.0.1
   - jupyter
   - ipython
   - cython
