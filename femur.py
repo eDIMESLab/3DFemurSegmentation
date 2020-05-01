@@ -398,7 +398,7 @@ def DistanceTransform(ChamferInput):
   _infinityDistance = np.sum(ChamferInput.shape) + 1
   distanceMap[ChamferInput == 0] = _infinityDistance
   distanceMapPad = np.pad(distanceMap, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
-  distanceMap = fast_distance_matrix.ManhattanChamferDistance(distanceMapPad, distanceMap.shape)
+  distanceMap = fastDistMatrix.ManhattanChamferDistance(distanceMapPad, distanceMap.shape)
   distanceMap = distanceMap[1:-1, 1:-1, 1:-1].copy()
   return distanceMap
 
@@ -412,6 +412,7 @@ def SheetnessBasedSmoothCost(pixelLeft,
                              pixelRight,
                              shtnLeft,
                              shtnRight):
+  COST_AMPLIFIER = 1000
   alpha = 5.0
   cond = (pixelLeft > -1) & (pixelRight > -1)
   smoothCostFromCenter = np.ones(pixelLeft[cond].shape)
@@ -420,12 +421,12 @@ def SheetnessBasedSmoothCost(pixelLeft,
   # From Center
   cond_b = shtnLeft[cond] >= shtnRight[cond]
   smoothCostFromCenter[cond_b] = np.exp(- 5. * dSheet[cond_b])
-  smoothCostFromCenter = smoothCostFromCenter * COST_AMPLIFIER * alpha + 1
+  smoothCostFromCenter = (smoothCostFromCenter * COST_AMPLIFIER * alpha + 1).astype(np.int32)
   # To Center
   cond_b = np.logical_not(cond_b)
   smoothCostToCenter[cond_b] = np.exp(- 5. * dSheet[cond_b])
-  smoothCostToCenter = smoothCostToCenter * COST_AMPLIFIER * alpha + 1
-  return pixelLeft[cond], smoothCostFromCenter, smoothCostToCenter
+  smoothCostToCenter = (smoothCostToCenter * COST_AMPLIFIER * alpha + 1).astype(np.int32)
+  return (pixelLeft[cond], pixelRight[cond]), smoothCostFromCenter, smoothCostToCenter
 
 
 def Segmentation(imgObj,
@@ -436,28 +437,27 @@ def Segmentation(imgObj,
   # assignIdsToPixels
   intensity  = itk.GetArrayFromImage(imgObj)
   softTissue = itk.GetArrayFromImage(softEst)
-  sheetness  = itk.GetArrayFromImage(Sheetness)
+  sheetness  = itk.GetArrayFromImage(sht)
 
   _pixelIdImage = np.zeros(intensity.shape)
   roi = itk.GetArrayFromImage(ROI)
   _pixelIdImage[roi==0] = -1
-  _pixelIdImage[roi!=0] = range(_totalPixelsInROI)
   _totalPixelsInROI = np.sum(roi!=0)
+  _pixelIdImage[roi!=0] = range(_totalPixelsInROI)
 
   # SheetnessBasedDataCost_compute for initializeDataCosts prep
   # - BONE, 0
-  dataCostSource = np.zeros(intensity.shape)
-  cond = (intensity < -500) | (softTissue == 1)
-  dataCostSource[cond] = 1 * COST_AMPLIFIER
-  # - TISSUE, 1
   dataCostSink = np.zeros(intensity.shape)
-  cond = (intensity > 400) & (sheetness > 0)
+  cond = (intensity < -500) | (softTissue == 1) & roi!=0
   dataCostSink[cond] = 1 * COST_AMPLIFIER
+  # - TISSUE, 1
+  dataCostSource = np.zeros(intensity.shape)
+  cond = (intensity > 400) & (sheetness > 0) & roi!=0
+  dataCostSource[cond] = 1 * COST_AMPLIFIER
 
   dataCostPixels = _pixelIdImage[roi!=0].flatten()
-  flat_dataCostSource = dataCostSource.flatten()
-  flat_dataCostSink = dataCostSink.flatten()
-
+  flat_dataCostSink = dataCostSink[roi!=0].flatten()
+  flat_dataCostSource = dataCostSource[roi!=0].flatten()
   # initializeNeighbours prep
   Xcenters, XFromCenter, XToCenter = SheetnessBasedSmoothCost(pixelLeft  = _pixelIdImage[:, :, :-1],
                                                               pixelRight = _pixelIdImage[:, :, 1:],
@@ -471,23 +471,28 @@ def Segmentation(imgObj,
                                                               pixelRight = _pixelIdImage[1:,:,:],
                                                               shtnLeft  = sheetness[:-1,:,:],
                                                               shtnRight = sheetness[1:,:,:])
-  NeighborsPixels = np.concatenate([Xcenters, Ycenters, Zcenters])
-  _totalNeighbors = len(flat_Neighbors)
-  flat_smoothCostFromCenter = np.concatenate([XFromCenter, YFromCenter, ZFromCenter])
-  flat_smoothCostToCenter = np.concatenate([XToCenter, YToCenter, ZToCenter])
-  uint_gcresult = RunGraphCut(_totalPixelsInROI,
-                              np.ascontiguousarray(dataCostPixels, dtype=np.uint32),
-                              np.ascontiguousarray(flat_dataCostSource, dtype=np.float32),
-                              np.ascontiguousarray(flat_dataCostSink, dtype=np.float32),
-                              _totalNeighbors,
-                              np.ascontiguousarray(NeighborsPixels, dtype=np.uint32),
-                              np.ascontiguousarray(flat_smoothCostFromCenter, dtype=np.float32),
-                              np.ascontiguousarray(flat_smoothCostToCenter, dtype=np.float32)
-                              )
-  uint_gcresult = np.asarray(uint_gcresult, dtype=np.uint8)
-  gcresult = itk.GetImageFromArray(boneDist)
-  return gcresult
+  CentersPixels = np.concatenate([Zcenters[0], Ycenters[0], Xcenters[0] ])
+  NeighborsPixels = np.concatenate([Zcenters[1], Ycenters[1], Xcenters[1] ])
+  _totalNeighbors = len(NeighborsPixels)
+  flat_smoothCostFromCenter = np.concatenate([ZFromCenter, YFromCenter, XFromCenter ])
+  flat_smoothCostToCenter = np.concatenate([ZToCenter, YToCenter, XToCenter ])
 
+  uint_gcresult = GraphCutSupport.RunGraphCut(_totalPixelsInROI,
+                                              np.ascontiguousarray(dataCostPixels, dtype=np.uint32),
+                                              np.ascontiguousarray(flat_dataCostSource, dtype=np.uint32),
+                                              np.ascontiguousarray(flat_dataCostSink, dtype=np.uint32),
+                                              _totalNeighbors,
+                                              np.ascontiguousarray(CentersPixels, dtype=np.uint32),
+                                              np.ascontiguousarray(NeighborsPixels, dtype=np.uint32),
+                                              np.ascontiguousarray(flat_smoothCostFromCenter, dtype=np.uint32),
+                                              np.ascontiguousarray(flat_smoothCostToCenter, dtype=np.uint32)
+                                              )
+  _labelIdImage = _pixelIdImage
+  _labelIdImage[roi!=0] = uint_gcresult
+  _labelIdImage[roi==0] = 0
+  _labelIdImage = np.asarray(_labelIdImage, dtype=np.uint8)
+  gcresult = itk.GetImageFromArray(_labelIdImage)
+  return gcresult
 
 
 #%%
@@ -593,10 +598,10 @@ if __name__ == "__main__":
   # I+k*(I-(I*G))
   inputCTUnsharpMasked = add(InputCT_float, m_MultiplyFilter)
   print("Computing multiscale sheetness measure at %d scales" % len(sigmasLargeScale))
-  Sheetness = multiscaleSheetness(inputCTUnsharpMasked,
+  Sheetness = multiscaleSheetness(multiScaleInput=inputCTUnsharpMasked,
                                   scales = sigmasLargeScale,
                                   SmoothingImageType = FloatImageType,
-                                  roi = autoROI)
+                                  roi = None)
   showSome(Sheetness, 50)
   # Pre-Processing Done.
 #%%
@@ -607,7 +612,7 @@ if __name__ == "__main__":
                           ROI = autoROI
                           )
   showSome(gcResult, 50)
-
+#%%
 
 
 
@@ -629,7 +634,7 @@ os.listdir("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/
 # Ok within float precision: cpp_chamferResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/chamferResult.nii", t = 'float')
 # Ok within previous float precision: cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
 cpp_sheetness = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/sheetnessF.nii", t = 'float')
-
+cpp_gc = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/gc-output-part-0.nii")
 
 prova_me = itk.GetArrayFromImage(Sheetness)
 prova_cpp = itk.GetArrayFromImage(cpp_sheetness)
@@ -644,8 +649,16 @@ np.unique(prova_cpp).min()
 
 #%%
 
-
-
+cpp_soft = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/soft-tissue-est.nii")
+cpp_sheetness = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/sheetnessF.nii", t = 'float')
+cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
+Sheetness
+gcResult = Segmentation(imgObj = inputCT,
+                        softEst = cpp_soft,
+                        sht = cpp_sheetness,
+                        ROI = cpp_roi
+                        )
+showSome(gcResult, 50)
 #%%
 
 

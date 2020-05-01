@@ -93,6 +93,7 @@ ext_modules = [ Extension(name= '.'.join(['lib', 'fastDistMatrix']),
                           extra_compile_args = ['-g0',
                                                 '-Ofast',
                                                 '-Wno-unused-function',
+                                                '-Wno-write-strings'
                                                 '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION'],
                           language='c++'
                           )

@@ -3,12 +3,13 @@
 
 unsigned int * GraphCutMaxFlow ( unsigned int &_totalPixelsInROI,
                                  unsigned int * dataCostPixels,
-                                 float * flat_dataCostSource,
-                                 float * flat_dataCostSink,
+                                 unsigned int * flat_dataCostSource,
+                                 unsigned int * flat_dataCostSink,
                                  unsigned int &_totalNeighbors,
+                                 unsigned int * CentersPixels,
                                  unsigned int * NeighborsPixels,
-                                 float * flat_smoothCostFromCenter,
-                                 float * flat_smoothCostToCenter
+                                 unsigned int * flat_smoothCostFromCenter,
+                                 unsigned int * flat_smoothCostToCenter
                                 )
 {
   typedef Graph<short,short,long long> GraphType;
@@ -22,7 +23,7 @@ unsigned int * GraphCutMaxFlow ( unsigned int &_totalPixelsInROI,
   }
   // initializeNeighbours
   for (unsigned i=0; i < _totalNeighbors; ++i) {
-    _gc -> add_edge(NeighborsPixels[i], NeighborsPixels[i]+1, flat_smoothCostFromCenter[i], flat_smoothCostToCenter[i]);
+    _gc -> add_edge(CentersPixels[i], NeighborsPixels[i], flat_smoothCostFromCenter[i], flat_smoothCostToCenter[i]);
   }
   std :: cout  << _totalNeighbors << " t-links added" << std :: endl;
   // compute maxflow

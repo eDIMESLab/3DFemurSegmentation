@@ -2,12 +2,13 @@
 # cython: language_level=2
 
 cdef extern from "3DGraphCut.cpp":
-  cdef unsigned int * GraphCutMaxFlow ( int &_totalPixelsInROI,
+  cdef unsigned int * GraphCutMaxFlow ( unsigned int &_totalPixelsInROI,
                                         unsigned int * dataCostPixels,
-                                        float * flat_dataCostSource,
-                                        float * flat_dataCostSink,
+                                        unsigned int * flat_dataCostSource,
+                                        unsigned int * flat_dataCostSink,
                                         unsigned int &_totalNeighbors,
+                                        unsigned int * CentersPixels,
                                         unsigned int * NeighborsPixels,
-                                        float * flat_smoothCostFromCenter,
-                                        float * flat_smoothCostToCenter
+                                        unsigned int * flat_smoothCostFromCenter,
+                                        unsigned int * flat_smoothCostToCenter
                                        )
