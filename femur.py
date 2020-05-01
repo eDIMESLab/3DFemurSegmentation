@@ -3,12 +3,13 @@ import numpy as np
 import ctypes
 import matplotlib.pylab as plb
 from scipy.ndimage.morphology import distance_transform_cdt
-#%%
+import os
 import sys
-sys.path.append('/home/PERSONALE/daniele.dallolio3/3DFemurSegmentation')
+sys.path.append('/home/PERSONALE/daniele.dallolio3/3DFemurSegmentation/lib')
 #%%
 import fastDistMatrix
-
+import GraphCutSupport
+#%%
 
 # Read a dicom series in a directory and turn it into a 3D image
 def dicomsTo3D(dirname, ImageType):

@@ -71,7 +71,7 @@ except FileNotFoundError:
 
 ext_modules = [ Extension(name= '.'.join(['lib', 'fastDistMatrix']),
                           sources=[os.path.join(os.getcwd(), 'src', 'distance_matrix.pyx')],
-                          libraries=['m'],
+                          libraries=[],
                           include_dirs=[numpy.get_include()],
                           extra_compile_args = ['-g0',
                                                 '-Ofast',
@@ -80,8 +80,12 @@ ext_modules = [ Extension(name= '.'.join(['lib', 'fastDistMatrix']),
                           language='c++'
                           ),
                 Extension(name= '.'.join(['lib', 'GraphCutSupport']),
-                          sources=[os.path.join(os.getcwd(), 'src', 'graphcut.pyx')],
-                          libraries=['m'],
+                          sources=[os.path.join(os.getcwd(), 'maxflow-v3.01', 'graph.cpp'),
+                                   os.path.join(os.getcwd(), 'maxflow-v3.01', 'maxflow.cpp'),
+                                   os.path.join(os.getcwd(), 'src', 'graphcut.pyx')],
+                          libraries=[],
+                          library_dirs=[os.path.join('usr', 'lib'),
+                                        os.path.join('usr', 'local', 'lib')],
                           include_dirs=[numpy.get_include(),
                                         os.path.join(os.getcwd(), 'include'),
                                         os.path.join(os.getcwd(), 'maxflow-v3.01')
