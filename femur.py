@@ -494,6 +494,126 @@ def Segmentation(imgObj,
   gcresult = itk.GetImageFromArray(_labelIdImage)
   return gcresult
 
+#%%
+############################
+# BONE SEPARATION FUNCTION #
+############################
+
+def erosion(labelImage,
+            radius,
+            ImageType,
+            d=3,
+            valueToErode = 1):
+  StructuringElementType = itk.FlatStructuringElement[d]
+  structuringElement = StructuringElementType.Ball(radius)
+  ErodeFilterType = itk.BinaryErodeImageFilter[itk.Image[ImageType,d], itk.Image[ImageType,d], StructuringElementType]
+  erosionFilter = ErodeFilterType.New()
+  erosionFilter.SetKernel(structuringElement)
+  erosionFilter.SetErodeValue(valueToErode)
+  erosionFilter.SetInput( labelImage )
+  erosionFilter.Update()
+  return erosionFilter.GetOutput()
+
+def SmoothnessCostFunction(pixelLeft,
+                           pixelRight,
+                           shtnLeft,
+                           shtnRight):
+  cond = (pixelLeft > -1) & (pixelRight > -1)
+  smoothCostFromCenter = np.ones(pixelLeft[cond].shape)
+  smoothCostToCenter   = np.ones(pixelLeft[cond].shape)
+  return (pixelLeft[cond], pixelRight[cond]), smoothCostFromCenter, smoothCostToCenter
+
+def RefineSegmentation(islandImage,
+                       subIslandLabels,
+                       ROI):
+  # assignIdsToPixels
+  _pixelIdImage = np.zeros(ROI.shape)
+  roi = itk.GetArrayFromImage(ROI)
+  _pixelIdImage[roi==0] = -1
+  _totalPixelsInROI = np.sum(roi!=0)
+  _pixelIdImage[roi!=0] = range(_totalPixelsInROI)
+
+  IslandsValues = itk.GetArrayFromImage(islandImage)
+  # SheetnessBasedDataCost_compute for initializeDataCosts prep
+  # 0
+  dataCostSink = np.zeros(IslandsValues.shape)
+  cond = (IslandsValues == subIslandLabels[0]) & roi!=0
+  dataCostSink[cond] = 1000
+  # 1
+  dataCostSource = np.zeros(IslandsValues.shape)
+  cond = (IslandsValues == subIslandLabels[1]) & roi!=0
+  dataCostSource[cond] = 1000
+
+  dataCostPixels = _pixelIdImage[roi!=0].flatten()
+  flat_dataCostSink = dataCostSink[roi!=0].flatten()
+  flat_dataCostSource = dataCostSource[roi!=0].flatten()
+  # initializeNeighbours prep
+  Xcenters, XFromCenter, XToCenter = SmoothnessCostFunction(pixelLeft  = _pixelIdImage[:, :, :-1],
+                                                            pixelRight = _pixelIdImage[:, :, 1:])
+  Ycenters, YFromCenter, YToCenter = SmoothnessCostFunction(pixelLeft  = _pixelIdImage[:, :-1, :],
+                                                            pixelRight = _pixelIdImage[:, 1:, :])
+  Zcenters, ZFromCenter, ZToCenter = SmoothnessCostFunction(pixelLeft  = _pixelIdImage[:-1,:,:],
+                                                            pixelRight = _pixelIdImage[1:,:,:])
+  CentersPixels = np.concatenate([Zcenters[0], Ycenters[0], Xcenters[0] ])
+  NeighborsPixels = np.concatenate([Zcenters[1], Ycenters[1], Xcenters[1] ])
+  _totalNeighbors = len(NeighborsPixels)
+  flat_smoothCostFromCenter = np.concatenate([ZFromCenter, YFromCenter, XFromCenter ])
+  flat_smoothCostToCenter = np.concatenate([ZToCenter, YToCenter, XToCenter ])
+
+  uint_gcresult = GraphCutSupport.RunGraphCut(_totalPixelsInROI,
+                                              np.ascontiguousarray(dataCostPixels, dtype=np.uint32),
+                                              np.ascontiguousarray(flat_dataCostSource, dtype=np.uint32),
+                                              np.ascontiguousarray(flat_dataCostSink, dtype=np.uint32),
+                                              _totalNeighbors,
+                                              np.ascontiguousarray(CentersPixels, dtype=np.uint32),
+                                              np.ascontiguousarray(NeighborsPixels, dtype=np.uint32),
+                                              np.ascontiguousarray(flat_smoothCostFromCenter, dtype=np.uint32),
+                                              np.ascontiguousarray(flat_smoothCostToCenter, dtype=np.uint32)
+                                              )
+  _labelIdImage = _pixelIdImage
+  _labelIdImage[roi!=0] = uint_gcresult
+  _labelIdImage[roi==0] = 0
+  _labelIdImage = np.asarray(_labelIdImage, dtype=np.uint8)
+  gcresult = itk.GetImageFromArray(_labelIdImage)
+  return gcresult
+
+
+def isIslandWithinDistance(image,
+                           distanceImage,
+                           label,
+                           maxDistance
+                          ):
+  values = itk.GetArrayFromImage(image)
+  dist_values = itk.GetArrayFromImage(distanceImage)
+  return np.any(dist_values[values == label] < maxDistance)
+
+
+def distanceMapByFastMarcher(image,
+                             objectLabel,
+                             stoppingValue,
+                             ImageType
+                            ):
+  FastMarchingImageFilter = itk.FastMarchingImageFilter[ImageType, ImageType]
+  fastMarcher = FastMarchingImageFilter.New()
+  fastMarcher.SetOutputSize(image.GetLargestPossibleRegion().GetSize())
+  fastMarcher.SetOutputOrigin(image.GetOrigin() )
+  fastMarcher.SetOutputSpacing(image.GetSpacing() )
+  fastMarcher.SetOutputDirection(image.GetDirection() )
+  fastMarcher.SetSpeedConstant(1.0)
+  if (stoppingValue > 0):
+    fastMarcher.SetStoppingValue(stoppingValue)
+  NodeType = itk.LevelSetNode.F3
+  FastMarchingNodeContainer = itk.VectorContainer[itk.UI, NodeType]
+  TrialIndexes = np.array(np.where(itk.GetArrayFromImage(image) == objectLabel)).T
+  seeds = FastMarchingNodeContainer.New()
+  seeds.Initialize()
+  for Idx in TrialIndexes:
+    node = seeds.CreateElementAt(seeds.Size())
+    node.SetValue(0)
+    node.SetIndex(Idx.tolist())
+  fastMarcher.SetTrialPoints(seeds)
+  fastMarcher.Update()
+  return fastMarcher.GetOutput()
 
 #%%
 import matplotlib.pylab as plb
@@ -605,7 +725,8 @@ if __name__ == "__main__":
   showSome(Sheetness, 50)
   # Pre-Processing Done.
 #%%
-  # segment
+  # Segment
+  print("Segmentation")
   gcResult = Segmentation(imgObj = inputCT,
                           softEst = softTissueEstimation,
                           sht = Sheetness,
@@ -613,7 +734,69 @@ if __name__ == "__main__":
                           )
   showSome(gcResult, 50)
 #%%
+  # Bone-separation
+  print("Bone Separation")
+  EROSION_RADIUS = 3
+  MAX_DISTANCE_FOR_ADJACENT_BONES = 15
 
+  print("Computing Connected Components")
+  mainIslands = ConnectedComponents(inputImage = gcResult,
+                                    outputImageType = itk.ctype('unsigned long'))
+  showSome(mainIslands, 50)
+  print("Erosion + Connected Components, ball radius=%d"% EROSION_RADIUS)
+  eroded_gc = erosion(gcResult, EROSION_RADIUS, UCType)
+  showSome(eroded_gc, 50)
+  subIslands = ConnectedComponents(inputImage = eroded_gc,
+                                   outputImageType = itk.ctype('unsigned long'))
+  showSome(subIslands, 50)
+  print("Discovering main islands containg bottlenecks")
+
+  mainArray = itk.GetArrayFromImage(mainIslands)
+  subArray = itk.GetArrayFromImage(subIslands)
+  main_labels, main_counts = np.unique(mainArray[mainArray!=0], return_counts=True)
+  subIslandsInfo =  { l:np.unique(subArray[(subArray!=0) & (mainArray==l)], return_counts=True) for l in main_labels}
+  activeStates = { l:np.array([ (cl/c > 0.001) and (cl > 100) for sl, cl in zip(subIslandsInfo[l][0],subIslandsInfo[l][1]) ]) for l, c in zip(main_labels, main_counts) }
+  MainIslandsToProcess = [ l for l in main_labels if np.sum(activeStates[l])>=2 ]
+  subIslandsSortedBySize = { l:subIslandsInfo[l][0][activeStates[l]][np.argsort(subIslandsInfo[l][1][activeStates[l]]) ] for l in MainIslandsToProcess }
+  subIslandsPairs = []
+  for l in MainIslandsToProcess:
+    for idx in range(len(subIslandsSortedBySize[l])-1):
+      subIsland = subIslandsSortedBySize[l][idx]
+      print("Computing distance from sub-island %d"% subIsland)
+      distance = distanceMapByFastMarcher(image = subIslands,
+                                          objectLabel = subIsland,
+                                          stoppingValue = MAX_DISTANCE_FOR_ADJACENT_BONES + 1,
+                                          ImageType = FloatImageType)
+      for jdx in range(idx+1, len(subIslandsSortedBySize[l])):
+        potentialAdjacentSubIsland = subIslandsSortedBySize[l][jdx]
+        islandsAdjacent = isIslandWithinDistance(image = subIslands,
+                                                 distanceImage = distance,
+                                                 label = potentialAdjacentSubIsland,
+                                                 maxDistance = MAX_DISTANCE_FOR_ADJACENT_BONES
+                                                )
+        subIslandsPairs += [ [l, subIsland, potentialAdjacentSubIsland] ] if islandsAdjacent else []
+  print("Number of bottlenecks to be found: %d"% len(subIslandsPairs));
+  for subI in subIslandsPairs:
+    mainLabel, i1, i2 = subI
+    print("Identifying bottleneck between sub-islands %d and %d within main island %d"% i1 % i2 % mainLabel)
+    roiSub = binaryThresholding(inputImage = mainIslands,
+                                lowerThreshold = mainLabel,
+                                upperThreshold = mainLabel)
+    gcOutput = RefineSegmentation(islandImage = subIslands,
+                                  subIslandLabels=[i1, i2],
+                                  ROI = roiSub)
+    # updateResult
+    uniqueLabel = np.max(mainArray) + 1
+    gcValues = itk.GetArrayFromImage(gcOutput)
+    mainArray[gcValues==1] = uniqueLabel
+  finalResult = RelabelComponents(inputImage = itk.GetImageFromArray(mainArray),
+                                  outputImageType = UCType)
+  showSome(finalResult, 50)
+#%%
+  # Save results
+  print("Saving")
+  print("Writing the result to %s"% outfile)
+  # Still choosing what to dump
 
 
 
@@ -638,27 +821,27 @@ cpp_gc = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segment
 
 prova_me = itk.GetArrayFromImage(Sheetness)
 prova_cpp = itk.GetArrayFromImage(cpp_sheetness)
-showSome(Sheetness,0)
-showSome(cpp_sheetness,0)
+showSome(Sheetness,50)
+showSome(cpp_sheetness,50)
 np.unique(prova_me == prova_cpp)
 np.unique(prova_me).max()
 np.unique(prova_cpp).max()
 np.unique(prova_me).min()
 np.unique(prova_cpp).min()
 
+plb.hist(prova_me.flatten())
+plb.hist(prova_cpp.flatten())
 
 #%%
 
 cpp_soft = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/soft-tissue-est.nii")
 cpp_sheetness = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/sheetnessF.nii", t = 'float')
 cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
-Sheetness
 gcResult = Segmentation(imgObj = inputCT,
                         softEst = cpp_soft,
                         sht = cpp_sheetness,
                         ROI = cpp_roi
                         )
-showSome(gcResult, 50)
 #%%
 
 
