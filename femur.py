@@ -477,6 +477,17 @@ def Segmentation(imgObj,
   flat_smoothCostFromCenter = np.concatenate([ZFromCenter, YFromCenter, XFromCenter ])
   flat_smoothCostToCenter = np.concatenate([ZToCenter, YToCenter, XToCenter ])
 
+  # sorted_idxs= np.lexsort((NeighborsPixels, CentersPixels))
+  # CentersPixels = CentersPixels[sorted_idxs]
+  # NeighborsPixels = NeighborsPixels[sorted_idxs]
+  # flat_smoothCostFromCenter = flat_smoothCostFromCenter[sorted_idxs]
+  # flat_smoothCostToCenter = flat_smoothCostToCenter[sorted_idxs]
+  #
+  # CentersPixels.tolist()==cpp_NeighInfo.iloc[:,0].tolist()
+  # NeighborsPixels.tolist()==cpp_NeighInfo.iloc[:,1].tolist()
+  # flat_smoothCostFromCenter.tolist()==cpp_NeighInfo.iloc[:,2].tolist()
+  # flat_smoothCostToCenter.tolist()==cpp_NeighInfo.iloc[:,3].tolist()
+
   uint_gcresult = GraphCutSupport.RunGraphCut(_totalPixelsInROI,
                                               np.ascontiguousarray(dataCostPixels, dtype=np.uint32),
                                               np.ascontiguousarray(flat_dataCostSource, dtype=np.uint32),
@@ -492,6 +503,7 @@ def Segmentation(imgObj,
   _labelIdImage[roi==0] = 0
   _labelIdImage = np.asarray(_labelIdImage, dtype=np.uint8)
   gcresult = itk.GetImageFromArray(_labelIdImage)
+  # _labelIdImage.tolist() == (itk.GetArrayFromImage(cpp_gc)).tolist()
   return gcresult
 
 #%%
@@ -515,9 +527,7 @@ def erosion(labelImage,
   return erosionFilter.GetOutput()
 
 def SmoothnessCostFunction(pixelLeft,
-                           pixelRight,
-                           shtnLeft,
-                           shtnRight):
+                           pixelRight):
   cond = (pixelLeft > -1) & (pixelRight > -1)
   smoothCostFromCenter = np.ones(pixelLeft[cond].shape)
   smoothCostToCenter   = np.ones(pixelLeft[cond].shape)
@@ -527,26 +537,39 @@ def RefineSegmentation(islandImage,
                        subIslandLabels,
                        ROI):
   # assignIdsToPixels
-  _pixelIdImage = np.zeros(ROI.shape)
+  IslandsValues = itk.GetArrayFromImage(islandImage)
+
+  _pixelIdImage = np.zeros(IslandsValues.shape)
   roi = itk.GetArrayFromImage(ROI)
   _pixelIdImage[roi==0] = -1
   _totalPixelsInROI = np.sum(roi!=0)
   _pixelIdImage[roi!=0] = range(_totalPixelsInROI)
 
-  IslandsValues = itk.GetArrayFromImage(islandImage)
   # SheetnessBasedDataCost_compute for initializeDataCosts prep
   # 0
   dataCostSink = np.zeros(IslandsValues.shape)
-  cond = (IslandsValues == subIslandLabels[0]) & roi!=0
+  cond = (IslandsValues == subIslandLabels[1]) & roi!=0
   dataCostSink[cond] = 1000
   # 1
   dataCostSource = np.zeros(IslandsValues.shape)
-  cond = (IslandsValues == subIslandLabels[1]) & roi!=0
+  cond = (IslandsValues == subIslandLabels[0]) & roi!=0
   dataCostSource[cond] = 1000
 
   dataCostPixels = _pixelIdImage[roi!=0].flatten()
   flat_dataCostSink = dataCostSink[roi!=0].flatten()
   flat_dataCostSource = dataCostSource[roi!=0].flatten()
+
+  # check_roi = np.array(np.where(roi!=0)).T
+  # np.unique(_pixelIdImage[roi!=0] == cpp_dataCostInfo[3])
+  # np.unique(cpp_dataCostInfo[0].apply(lambda x: int(x.replace("[","")))==check_roi[:,2])
+  # np.unique(cpp_dataCostInfo[1]==check_roi[:,1])
+  # np.unique(cpp_dataCostInfo[2].apply(lambda x: int(x.replace("]","")))==check_roi[:,0])
+  # cpp_dataCostInfo[2].apply(lambda x: int(x.replace("]","")))
+  # cpp_dataCostInfo
+  # np.unique(flat_dataCostSource == cpp_dataCostInfo[4])
+  # np.unique(flat_dataCostSink == cpp_dataCostInfo[5])
+
+
   # initializeNeighbours prep
   Xcenters, XFromCenter, XToCenter = SmoothnessCostFunction(pixelLeft  = _pixelIdImage[:, :, :-1],
                                                             pixelRight = _pixelIdImage[:, :, 1:])
@@ -559,6 +582,13 @@ def RefineSegmentation(islandImage,
   _totalNeighbors = len(NeighborsPixels)
   flat_smoothCostFromCenter = np.concatenate([ZFromCenter, YFromCenter, XFromCenter ])
   flat_smoothCostToCenter = np.concatenate([ZToCenter, YToCenter, XToCenter ])
+  # len(flat_smoothCostFromCenter)
+  # organize_scf = pd.DataFrame(data=[CentersPixels, NeighborsPixels, flat_smoothCostFromCenter, flat_smoothCostToCenter]).T
+  # organize_scf = organize_scf.sort_values(by=[0,1])
+  # organize_scf.iloc[:,0].tolist()==cpp_NeighInfo.iloc[:,0].tolist()
+  # organize_scf.iloc[:,1].tolist()==cpp_NeighInfo.iloc[:,1].tolist()
+  # organize_scf.iloc[:,2].tolist()==cpp_NeighInfo.iloc[:,2].tolist()
+  # organize_scf.iloc[:,3].tolist()==cpp_NeighInfo.iloc[:,3].tolist()
 
   uint_gcresult = GraphCutSupport.RunGraphCut(_totalPixelsInROI,
                                               np.ascontiguousarray(dataCostPixels, dtype=np.uint32),
@@ -570,11 +600,15 @@ def RefineSegmentation(islandImage,
                                               np.ascontiguousarray(flat_smoothCostFromCenter, dtype=np.uint32),
                                               np.ascontiguousarray(flat_smoothCostToCenter, dtype=np.uint32)
                                               )
+
   _labelIdImage = _pixelIdImage
   _labelIdImage[roi!=0] = uint_gcresult
   _labelIdImage[roi==0] = 0
   _labelIdImage = np.asarray(_labelIdImage, dtype=np.uint8)
   gcresult = itk.GetImageFromArray(_labelIdImage)
+  gcresult
+  # itk.GetArrayFromImage(gcresult).tolist()==itk.GetArrayFromImage(cpp_gcOutput).tolist()
+  # _labelIdImage.tolist()==itk.GetArrayFromImage(cpp_gcOutput).tolist()
   return gcresult
 
 
@@ -609,11 +643,19 @@ def distanceMapByFastMarcher(image,
   seeds.Initialize()
   for Idx in TrialIndexes:
     node = seeds.CreateElementAt(seeds.Size())
-    node.SetValue(0)
-    node.SetIndex(Idx.tolist())
+    node.SetValue(0.)
+    node.SetIndex(Idx[::-1].tolist())
   fastMarcher.SetTrialPoints(seeds)
   fastMarcher.Update()
   return fastMarcher.GetOutput()
+
+# plb.hist(np.unique(itk.GetArrayFromImage(fastMarcher.GetOutput())))
+# len(TrialIndexes)
+# prova = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/provaA.txt", header=None)
+# np.unique(prova[prova[0]==27][3].apply(lambda x: int(x.replace("]","")))==TrialIndexes[:,0])
+# np.unique(prova[prova[0]==27][2]==TrialIndexes[:,1])
+# np.unique(prova[prova[0]==27][1].apply(lambda x: int(x.replace(" [","")))==TrialIndexes[:,2])
+
 
 #%%
 import matplotlib.pylab as plb
@@ -723,9 +765,10 @@ if __name__ == "__main__":
                                   SmoothingImageType = FloatImageType,
                                   roi = None)
   showSome(Sheetness, 50)
-  # Pre-Processing Done.
 #%%
-  # Segment
+  ###########
+  # Segment #
+  ###########
   print("Segmentation")
   gcResult = Segmentation(imgObj = inputCT,
                           softEst = softTissueEstimation,
@@ -733,21 +776,24 @@ if __name__ == "__main__":
                           ROI = autoROI
                           )
   showSome(gcResult, 50)
+  # itk.GetArrayFromImage((gcResult)).tolist() == (itk.GetArrayFromImage(cpp_gc)).tolist()
 #%%
-  # Bone-separation
+  ###################
+  # Bone-separation #
+  ###################
   print("Bone Separation")
   EROSION_RADIUS = 3
   MAX_DISTANCE_FOR_ADJACENT_BONES = 15
 
   print("Computing Connected Components")
   mainIslands = ConnectedComponents(inputImage = gcResult,
-                                    outputImageType = itk.ctype('unsigned long'))
+                                    outputImageType = UCType)
   showSome(mainIslands, 50)
   print("Erosion + Connected Components, ball radius=%d"% EROSION_RADIUS)
   eroded_gc = erosion(gcResult, EROSION_RADIUS, UCType)
   showSome(eroded_gc, 50)
   subIslands = ConnectedComponents(inputImage = eroded_gc,
-                                   outputImageType = itk.ctype('unsigned long'))
+                                   outputImageType = UCType)
   showSome(subIslands, 50)
   print("Discovering main islands containg bottlenecks")
 
@@ -777,8 +823,8 @@ if __name__ == "__main__":
         subIslandsPairs += [ [l, subIsland, potentialAdjacentSubIsland] ] if islandsAdjacent else []
   print("Number of bottlenecks to be found: %d"% len(subIslandsPairs));
   for subI in subIslandsPairs:
-    mainLabel, i1, i2 = subI
-    print("Identifying bottleneck between sub-islands %d and %d within main island %d"% i1 % i2 % mainLabel)
+    mainLabel, i1, i2 = map(int, subI)
+    print("Identifying bottleneck between sub-islands %d and %d within main island %d"%(i1, i2, mainLabel))
     roiSub = binaryThresholding(inputImage = mainIslands,
                                 lowerThreshold = mainLabel,
                                 upperThreshold = mainLabel)
@@ -788,7 +834,7 @@ if __name__ == "__main__":
     # updateResult
     uniqueLabel = np.max(mainArray) + 1
     gcValues = itk.GetArrayFromImage(gcOutput)
-    mainArray[gcValues==1] = uniqueLabel
+    mainArray[gcValues==1] = uniqueLabel # result
   finalResult = RelabelComponents(inputImage = itk.GetImageFromArray(mainArray),
                                   outputImageType = UCType)
   showSome(finalResult, 50)
@@ -808,6 +854,7 @@ if __name__ == "__main__":
 #%%
 import os
 os.listdir("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/")
+# Check Pre-Processing
 # Ok: cpp_thresholded = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/thresholdedInputCT.nii", t = 'short')
 # Ok: cpp_thresholdedCast = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/thresholdedInputCT_short.nii", t = 'float')
 # Ok within float precision: cpp_SmoothingA = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/SmoothinRecursive1.500000.nii", t= 'float')
@@ -816,32 +863,46 @@ os.listdir("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/
 # Ok within float precision: cpp_boneEstimation = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/boneEstimation.nii")
 # Ok within float precision: cpp_chamferResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/chamferResult.nii", t = 'float')
 # Ok within previous float precision: cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
-cpp_sheetness = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/sheetnessF.nii", t = 'float')
-cpp_gc = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/gc-output-part-0.nii")
 
-prova_me = itk.GetArrayFromImage(Sheetness)
-prova_cpp = itk.GetArrayFromImage(cpp_sheetness)
-showSome(Sheetness,50)
-showSome(cpp_sheetness,50)
+# Check Segmentation
+# Starting from:
+# cpp_soft = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/soft-tissue-est.nii")
+# cpp_sheetness = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/sheetnessRightBeforeSegm.nii", t = 'float')
+# cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
+# softTissueEstimation=cpp_soft
+# Sheetness=cpp_sheetness
+# autoROI=cpp_roi
+# Ok: cpp_pixelIdImage = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/_pixelIdImage.nii", t='float')
+# Ok: cpp_dataCostInfo = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/initDataCosts.txt", header=None)
+# Ok: cpp_NeighInfo = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/initNeigh.txt", header=None)
+# Ok: cpp_gc = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/gc-output-part-0.nii")
+
+# Check Bone-separation
+# Starting from: cpp_assembled = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/assembledResult.nii")
+# Ok: cpp_mainIslands = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/mainIslands.nii")
+# Ok: cpp_eroded = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/erodedMain.nii")
+# Ok: cpp_subIslands = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/subIslands.nii")
+# Ok: cpp_distance = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/distance_28.nii", t = 'float')
+# Ok: cpp_roiSub = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi_sub_5_1_1.nii")
+# Ok: cpp_pixelIdImage = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/_pixelIdImage.nii", t='float')
+# Ok: cpp_dataCostInfo = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/initDataCosts.txt", header=None)
+# Ok: cpp_NeighInfo = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/initNeigh.txt", header=None)
+# Ok: cpp_gcOutput = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/gcOut_5_1_1.nii")
+# Ok: cpp_updateResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/resultAfter_5_1_1.nii")
+# Ok: cpp_finalResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/finalResult.nii")
+# Done
+
+prova_me = itk.GetArrayFromImage(finalResult)
+prova_cpp = itk.GetArrayFromImage(cpp_finalResult)
+# showSome(mainIslands,50)
+# showSome(cpp_eroded,50)
 np.unique(prova_me == prova_cpp)
+np.where(prova_me != prova_cpp)
 np.unique(prova_me).max()
 np.unique(prova_cpp).max()
 np.unique(prova_me).min()
 np.unique(prova_cpp).min()
 
-plb.hist(prova_me.flatten())
-plb.hist(prova_cpp.flatten())
-
-#%%
-
-cpp_soft = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/soft-tissue-est.nii")
-cpp_sheetness = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/sheetnessF.nii", t = 'float')
-cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
-gcResult = Segmentation(imgObj = inputCT,
-                        softEst = cpp_soft,
-                        sht = cpp_sheetness,
-                        ROI = cpp_roi
-                        )
 #%%
 
 
