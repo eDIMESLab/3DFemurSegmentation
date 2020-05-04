@@ -38,7 +38,10 @@ Then, activate the environment and build Cython libraries:
 username@local:~/3DFemurSegmentation$ conda activate itk
 username@local:~/3DFemurSegmentation$ python setup.py develop --user
 ```
-Make sure to add ~/3DFemurSegmentation/lib/ to your Python library path.
+Make sure to add ~/3DFemurSegmentation/lib/ to your Python library path before running. On Ubuntu OS type:
+```console
+username@local:~/3DFemurSegmentation$ export PYTHONPATH=$PYTHONPATH:~/3DFemurSegmentation/lib/
+```
 
 Now, run the unsupervised segmentation by supplying input DICOMs directory and output binary DICOMs directory:
 ```console
