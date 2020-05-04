@@ -10,6 +10,8 @@ import sys
 import fastDistMatrix
 import GraphCutSupport
 #%%
+import argparse
+#%%
 
 # Dump 3D image into a 2D dicom image series with metadata adding option
 def Volume3DToDicom(imgObj, MetadataObj = None, outdir = "", format_templ = "%03d.dcm"):
