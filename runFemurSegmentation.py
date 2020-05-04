@@ -725,18 +725,18 @@ def duplicate(img,
 def parse_args ():
   description = "GraphCut-based Femur Unsupervised 3D Segmentation"
   parser = argparse.ArgumentParser(description=description)
-  parser.add_argument('--dir',
-                      dest='dicom_dir',
+  parser.add_argument('--indir',
+                      dest='indir',
                       required=True,
                       type=str,
                       action='store',
-                      help='DICOMs directory' )
+                      help='Input DICOMs directory' )
   parser.add_argument('--outdir',
                       dest='outdir',
                       required=False,
                       type=str,
                       action='store',
-                      help='Output directory',
+                      help='Output DICOMs directory',
                       default='')
   args = parser.parse_args()
   return args
@@ -747,7 +747,7 @@ def parse_args ():
 if __name__ == "__main__":
 
   args = parse_args()
-  DicomDir = args.dicom_dir
+  DicomDir = args.indir
   outdir = args.outdir
 
   # Parameters
