@@ -28,7 +28,7 @@ Clone the repository:
 username@local:~$ git clone https://github.com/eDIMESLab/3DFemurSegmentation.git
 ```
 
-Next, in order to create 3DFemurSegmentation custom environment type:
+Next, in order to create 3DFemurSegmentation custom environment, type:
 ```console
 username@local:~/3DFemurSegmentation$ conda env create -f itk.yaml
 ```
@@ -38,12 +38,12 @@ Then, activate the environment and build Cython libraries:
 username@local:~/3DFemurSegmentation$ conda activate itk
 username@local:~/3DFemurSegmentation$ python setup.py develop --user
 ```
-Make sure to add ~/3DFemurSegmentation/lib/ to your Python library path before running. On Ubuntu OS type:
+Make sure to add ~/3DFemurSegmentation/lib/ to your Python library path before running. On Ubuntu OS, type:
 ```console
 username@local:~/3DFemurSegmentation$ export PYTHONPATH=$PYTHONPATH:~/3DFemurSegmentation/lib/
 ```
 
-Now, run the unsupervised segmentation by supplying input DICOMs directory and output binary DICOMs directory:
+Now, run the unsupervised segmentation by supplying input DICOMs directory and output DICOMs directory:
 ```console
 username@local:~/3DFemurSegmentation$ python runFemurSegmentation.py --indir ./indir_example  --outdir ./outdir_example
 ```
