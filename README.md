@@ -1,4 +1,4 @@
-# Python implementation of Graph-cut based 3D Segmentation of Femur 
+# Graph-cut based Unsupervised 3D Segmentation of Femur
 
 <div content="" clear="both" display="table">
   <a href="https://github.com/eDIMESLab">
@@ -32,6 +32,19 @@ Next, in order to create 3DFemurSegmentation custom environment type:
 ```console
 username@local:~/3DFemurSegmentation$ conda env create -f itk.yaml
 ```
+
+Then, activate the environment and build Cython libraries:
+```console
+username@local:~/3DFemurSegmentation$ conda activate itk
+username@local:~/3DFemurSegmentation$ python setup.py develop --user
+```
+Make sure to add ~/3DFemurSegmentation/lib/ to your Python library path.
+
+Now, run the unsupervised segmentation by supplying input DICOMs directory and output binary DICOMs directory:
+```console
+username@local:~/3DFemurSegmentation$ python runFemurSegmentation.py --indir ./indir_example  --outdir ./outdir_example
+```
+
 
 ## Authors
 
