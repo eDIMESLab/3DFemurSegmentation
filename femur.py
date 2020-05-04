@@ -48,7 +48,11 @@ def thresholding(inputImage,
                  upperThreshold = 600):
   np_inputImage = itk.GetArrayFromImage(inputImage)
   np_inputImage = np.minimum( upperThreshold, np.maximum( np_inputImage, lowerThreshold) )
-  return itk.GetImageFromArray(np_inputImage)
+  result = itk.GetImageFromArray(np_inputImage)
+  result.SetOrigin(inputImage.GetOrigin())
+  result.SetSpacing(inputImage.GetSpacing())
+  result.SetDirection(inputImage.GetDirection())
+  return result
 
 
 def castImage(imgObj, OutputType):
@@ -65,13 +69,15 @@ def computeRs(RsInputImg,
               # threshold = 1e-4,
               roi = None):
   eigenvalues_matrix = np.abs(RsInputImg)
-  eigenvalues_matrix[:,:,:,:3] = np.sort(eigenvalues_matrix[:,:,:,:3])
+  # eigenvalues_matrix[:,:,:,:3] = np.sort(eigenvalues_matrix[:,:,:,:3])
   det_image = np.sum(eigenvalues_matrix, axis=-1)
   if not roi is None:
     inside = roi!=0
     mean_norm = 1. / np.mean(det_image[inside])
+    print("Mean norm = %f"% np.mean(det_image[inside]))
   else:
     mean_norm = 1. / np.mean(det_image)
+    print("Mean norm = %f"% np.mean(det_image))
   Rnoise = det_image*mean_norm
   RsImage = np.empty(eigenvalues_matrix.shape[:-1] + (4,), dtype=float)
   # al3_null = eigenvalues_matrix[:,:,:,2] > threshold
@@ -85,7 +91,7 @@ def computeRs(RsInputImg,
   RsImage[al3_null, 2] = eigs[:,0]*tmp # Rblob
   RsImage[al3_null, 3] = Rnoise[al3_null] # Rnoise
   return RsImage, eigenvalues_matrix, al3_null
-
+# plb.hist(cpp_rs[4].to_numpy()-RsImage[:,:,:,0].flatten())
 
 
 def computeSheetnessMeasure(SheetMeasInput,
@@ -99,14 +105,14 @@ def computeSheetnessMeasure(SheetMeasInput,
   else:
     sortedEigs = itk.GetArrayFromImage(SheetMeasInput)
     # Sort them by abs
-    l1, l2, l3 = sortedEigs[:,:,:,0], sortedEigs[:,:,:,1], sortedEigs[:,:,:,2]
-    condA = np.abs(l1) > np.abs(l2)
-    l1[condA], l2[condA] = l2[condA], l1[condA]
-    condB = np.abs(l2) > np.abs(l3)
-    l2[condB], l3[condB] = l3[condB], l2[condB]
-    condC = np.abs(l1) > np.abs(l2)
-    l1[condC], l2[condC] = l2[condC], l1[condC]
-    sortedEigs[:,:,:,0], sortedEigs[:,:,:,1], sortedEigs[:,:,:,2] = l1, l2, l3
+    # l1, l2, l3 = sortedEigs[:,:,:,0], sortedEigs[:,:,:,1], sortedEigs[:,:,:,2]
+    # condA = np.abs(l1) > np.abs(l2)
+    # l1[condA], l2[condA] = l2[condA], l1[condA]
+    # condB = np.abs(l2) > np.abs(l3)
+    # l2[condB], l3[condB] = l3[condB], l2[condB]
+    # condC = np.abs(l1) > np.abs(l2)
+    # l1[condC], l2[condC] = l2[condC], l1[condC]
+    # sortedEigs[:,:,:,0], sortedEigs[:,:,:,1], sortedEigs[:,:,:,2] = l1, l2, l3
     RsImg, EigsImg, NoNullEigs = computeRs(RsInputImg = sortedEigs, roi=roi)
   SheetnessImage = np.empty(EigsImg.shape[:-1], dtype=float)
   SheetnessImage[NoNullEigs] = - np.sign( sortedEigs[NoNullEigs,2] )
@@ -120,6 +126,16 @@ def computeSheetnessMeasure(SheetMeasInput,
   SheetnessImage[NoNullEigs] *= ( 1 - np.exp(-RsImg[NoNullEigs,3] * RsImg[NoNullEigs,3] * 4) )
   # SheetnessImage = itk.GetImageFromArray(SheetnessImage)
   return SheetnessImage
+# RsImg = np.zeros(RsImg.shape)
+# RsImg[:,:,:,0] = cpp_rs[4].to_numpy().reshape(EigsImg.shape[:-1])
+# RsImg[:,:,:,1] = cpp_rs[5].to_numpy().reshape(EigsImg.shape[:-1])
+# RsImg[:,:,:,2] = cpp_rs[6].to_numpy().reshape(EigsImg.shape[:-1])
+# RsImg[:,:,:,3] = cpp_noise[3].to_numpy().reshape(EigsImg.shape[:-1])
+# EigsImg[:,:,:,0] = cpp_eigs[3].to_numpy().reshape(HessianMatrices[0].shape)
+# EigsImg[:,:,:,1] = cpp_eigs[4].to_numpy().reshape(HessianMatrices[0].shape)
+# EigsImg[:,:,:,2] = cpp_eigs[5].to_numpy().reshape(HessianMatrices[0].shape)
+# plb.hist(cpp_meas[3].to_numpy()-SheetnessImage.flatten())
+
 
 
 
@@ -140,6 +156,7 @@ def computeEigenvalues(SmoothImg,
   return m_EigenAnalysisFilter.GetOutput()
 
 
+# M11, M12, M13, M22, M23, M33 = ((cpp_hxx[3]).to_numpy().reshape(hxx.shape),(cpp_hxy[3]).to_numpy().reshape(hxx.shape),(cpp_hxz[3]).to_numpy().reshape(hxx.shape),(cpp_hyy[3]).to_numpy().reshape(hxx.shape),(cpp_hyz[3]).to_numpy().reshape(hxx.shape),(cpp_hzz[3]).to_numpy().reshape(hxx.shape))
 # M11, M12, M13, M22, M23, M33=hxx, hxy, hxz, hyy, hyz, hzz
 def GetEigenValues(M11, M12, M13, M22, M23, M33, roi=None):
   # Select roi
@@ -189,9 +206,9 @@ def GetEigenValues(M11, M12, M13, M22, M23, M33, roi=None):
 
 
 
-
 def computeQuasiHessian(SmoothImg):
   SRImg = itk.GetArrayFromImage(SmoothImg)
+  # SRImg.tolist() == itk.GetArrayFromImage(cpp_SmoothingA).tolist()
   PaddedImg = np.pad(SRImg, 2,'edge')
   # Computing Values
   tmp = 2. * PaddedImg[2:-2,2:-2,2:-2]
@@ -229,9 +246,17 @@ def SmoothingRecursive(SRInput,
   SRFilterType = itk.SmoothingRecursiveGaussianImageFilter[SRImageType, SRImageType]
   SRObj = SRFilterType.New()
   SRObj.SetInput(SRInput)
-  SRObj.SetSigma(sigma)
+  SRObj.SetSigma( sigma )
   SRObj.Update()
-  return SRObj.GetOutput()
+  output_image = SRObj.GetOutput()
+  output_image.DisconnectPipeline()
+  return output_image
+# SRInput=cpp_RightBeforeSmoothingA
+# SRInput= itk.GetImageFromArray(itk.GetArrayFromImage(cpp_RightBeforeSmoothingA))
+# itk.GetArrayFromImage(cpp_SmoothingA).tolist()==itk.GetArrayFromImage(output_image).tolist()
+# prova=itk.GetArrayFromImage(cpp_SmoothingA)!=itk.GetArrayFromImage(output_image)
+# np.min(itk.GetArrayFromImage(cpp_SmoothingA)[prova]-itk.GetArrayFromImage(output_image)[prova])
+# np.max(itk.GetArrayFromImage(cpp_SmoothingA)[prova]-itk.GetArrayFromImage(output_image)[prova])
 
 
 def singlescaleSheetness(singleScaleInput,
@@ -242,18 +267,31 @@ def singlescaleSheetness(singleScaleInput,
                          beta = 0.5,
                          gamma = 0.5):
   print("Computing single-scale sheetness, sigma=%4.2f"% scale)
+  # np.unique(itk.GetArrayFromImage(singleScaleInput)==itk.GetArrayFromImage(cpp_RightBeforeSmoothingA).tolist())
+  SmoothImg = SmoothingRecursive(SRInput = singleScaleInput,
+                                 sigma = scale,
+                                 SRImageType = SmoothingImageType)
+  # itk.GetArrayFromImage(SmoothImg).tolist() == itk.GetArrayFromImage(cpp_SmoothingA).tolist()
+  HessianMatrices = computeQuasiHessian(SmoothImg)
+  # hxx, hxy, hxz, hyy, hyz, hzz = HessianMatrices
+  # np.max(cpp_hxx[3]-hxx.flatten())
+  # np.max(cpp_hxy[3]-hxy.flatten())
+  # np.max(cpp_hxz[3]-hxz.flatten())
+  # np.max(cpp_hyy[3]-hyy.flatten())
+  # np.max(cpp_hyz[3]-hyz.flatten())
+  # np.max(cpp_hzz[3]-hzz.flatten())
+  EigenImg = GetEigenValues(*HessianMatrices, roi)
+  # EigenImg = np.zeros(M11.shape + (4,))
+  # EigenImg[:,:,:,0] = cpp_eigs[3].to_numpy().reshape(HessianMatrices[0].shape)
+  # EigenImg[:,:,:,1] = cpp_eigs[4].to_numpy().reshape(HessianMatrices[0].shape)
+  # EigenImg[:,:,:,2] = cpp_eigs[5].to_numpy().reshape(HessianMatrices[0].shape)
 
-  # SmoothImg = SmoothingRecursive(SRInput = singleScaleInput,
-  #                                sigma = scale,
-  #                                SRImageType = SmoothingImageType)
-  # HessianMatrices = computeQuasiHessian(SmoothImg)
-  # EigenImg = GetEigenValues(*HessianMatrices, roi)
-  SmoothImg = computeHessian(HessInput = singleScaleInput,
-                             sigma = scale,
-                             HRGImageType = SmoothingImageType)
-  EigenImg = computeEigenvalues(SmoothImg = SmoothImg,
-                                EigType = itk.ctype('float'),
-                                D = 3)
+  # SmoothImg = computeHessian(HessInput = singleScaleInput,
+  #                            sigma = scale,
+  #                            HRGImageType = SmoothingImageType)
+  # EigenImg = computeEigenvalues(SmoothImg = SmoothImg,
+  #                               EigType = itk.ctype('float'),
+  #                               D = 3)
   SheetnessImg = computeSheetnessMeasure(SheetMeasInput = EigenImg,
                                          roi = roi,
                                          alpha = alpha,
@@ -297,6 +335,11 @@ def multiscaleSheetness(multiScaleInput,
       refinement = abs(singleScaleSheetness) > abs(multiscaleSheetness)
       multiscaleSheetness[refinement] = singleScaleSheetness[refinement]
   multiscaleSheetness = itk.GetImageFromArray(multiscaleSheetness.astype(np.float32))
+  # itk.GetArrayFromImage(multiscaleSheetness).tolist()==itk.GetArrayFromImage(cpp_smallScaleSheetnessImage).tolist()
+  # prova=itk.GetArrayFromImage(multiscaleSheetness)!=itk.GetArrayFromImage(cpp_smallScaleSheetnessImage)
+  multiscaleSheetness.SetOrigin(multiScaleInput.GetOrigin())
+  multiscaleSheetness.SetSpacing(multiScaleInput.GetSpacing())
+  multiscaleSheetness.SetDirection(multiScaleInput.GetDirection())
   return multiscaleSheetness
 
 
@@ -306,17 +349,31 @@ def binaryThresholding(inputImage,
                        outputImageType = None,
                        insideValue = 1,
                        outsideValue = 0):
-  s,d = itk.template(inputImage)[1]
-  input_type = itk.Image[s,d]
-  output_type = input_type if outputImageType is None else itk.Image[outputImageType,d]
-  thresholder = itk.BinaryThresholdImageFilter[input_type, output_type].New()
-  thresholder.SetInput(inputImage)
-  thresholder.SetLowerThreshold( lowerThreshold )
-  thresholder.SetUpperThreshold( upperThreshold )
-  thresholder.SetInsideValue(insideValue)
-  thresholder.SetOutsideValue(outsideValue)
-  thresholder.Update()
-  return thresholder.GetOutput()
+  # s,d = itk.template(inputImage)[1]
+  # input_type = itk.Image[s,d]
+  # output_type = input_type if outputImageType is None else itk.Image[outputImageType,d]
+  # thresholder = itk.BinaryThresholdImageFilter[input_type, output_type].New()
+  # thresholder.SetInput(inputImage)
+  # thresholder.SetLowerThreshold( lowerThreshold )
+  # thresholder.SetUpperThreshold( upperThreshold )
+  # thresholder.SetInsideValue(insideValue)
+  # thresholder.SetOutsideValue(outsideValue)
+  # thresholder.Update()
+  # return thresholder.GetOutput()
+  values = itk.GetArrayFromImage(inputImage)
+  cond = (values>=lowerThreshold) & (values<=upperThreshold)
+  values[ cond ] = insideValue
+  values[ np.logical_not(cond) ] = outsideValue
+  result = itk.GetImageFromArray(values)
+  result.SetOrigin(inputImage.GetOrigin())
+  result.SetSpacing(inputImage.GetSpacing())
+  result.SetDirection(inputImage.GetDirection())
+  if not outputImageType is None:
+    s,d = itk.template(inputImage)[1]
+    output_type = itk.Image[outputImageType,d]
+    result = castImage(result, OutputType=output_type)
+  return result
+
 
 
 def ConnectedComponents(inputImage,
@@ -332,13 +389,36 @@ def ConnectedComponents(inputImage,
 
 def RelabelComponents(inputImage,
                       outputImageType = None):
-  s,d = itk.template(inputImage)[1]
-  input_type = itk.Image[s,d]
-  output_type = input_type if outputImageType is None else itk.Image[outputImageType,d]
-  relabel = itk.RelabelComponentImageFilter[input_type, output_type].New()
-  relabel.SetInput(inputImage)
-  relabel.Update()
-  return relabel.GetOutput()
+  # relabel = itk.RelabelComponentImageFilter[input_type, output_type].New()
+  # relabel.SetInput(inputImage)
+  # relabel.Update()
+  # return relabel.GetOutput()
+  label_field = itk.GetArrayFromImage(inputImage)
+  offset = 1
+  max_label = int(label_field.max()) # Ensure max_label is an integer
+  labels, labels_counts= np.unique(label_field,return_counts=True)
+  labels=labels[np.argsort(labels_counts)[::-1]]
+  labels0 = labels[labels != 0]
+  new_max_label = offset - 1 + len(labels0)
+  new_labels0 = np.arange(offset, new_max_label + 1)
+  output_type = label_field.dtype
+  required_type = np.min_scalar_type(new_max_label)
+  if np.dtype(required_type).itemsize > np.dtype(label_field.dtype).itemsize:
+      output_type = required_type
+  forward_map = np.zeros(max_label + 1, dtype=output_type)
+  forward_map[labels0] = new_labels0
+  inverse_map = np.zeros(new_max_label + 1, dtype=output_type)
+  inverse_map[offset:] = labels0
+  relabeled = forward_map[label_field]
+  result = itk.GetImageFromArray(relabeled)
+  result.SetOrigin(inputImage.GetOrigin())
+  result.SetSpacing(inputImage.GetSpacing())
+  result.SetDirection(inputImage.GetDirection())
+  if not outputImageType is None:
+    s,d = itk.template(inputImage)[1]
+    output_type = itk.Image[outputImageType,d]
+    result = castImage(result, OutputType=output_type)
+  return result
 
 
 def Gaussian(GaussInput,
@@ -504,6 +584,9 @@ def Segmentation(imgObj,
   _labelIdImage = np.asarray(_labelIdImage, dtype=np.uint8)
   gcresult = itk.GetImageFromArray(_labelIdImage)
   # _labelIdImage.tolist() == (itk.GetArrayFromImage(cpp_gc)).tolist()
+  gcresult.SetOrigin(imgObj.GetOrigin())
+  gcresult.SetSpacing(imgObj.GetSpacing())
+  gcresult.SetDirection(imgObj.GetDirection())
   return gcresult
 
 #%%
@@ -606,9 +689,11 @@ def RefineSegmentation(islandImage,
   _labelIdImage[roi==0] = 0
   _labelIdImage = np.asarray(_labelIdImage, dtype=np.uint8)
   gcresult = itk.GetImageFromArray(_labelIdImage)
-  gcresult
   # itk.GetArrayFromImage(gcresult).tolist()==itk.GetArrayFromImage(cpp_gcOutput).tolist()
   # _labelIdImage.tolist()==itk.GetArrayFromImage(cpp_gcOutput).tolist()
+  gcresult.SetOrigin(islandImage.GetOrigin())
+  gcresult.SetSpacing(islandImage.GetSpacing())
+  gcresult.SetDirection(islandImage.GetDirection())
   return gcresult
 
 
@@ -673,6 +758,14 @@ def Read3DNifti(fn, t = 'unsigned char'):
   reader.Update()
   return reader.GetOutput()
 
+def duplicate(img,
+              ImageType):
+  DuplicatorType = itk.ImageDuplicator[ImageType]
+  duplicator = DuplicatorType.New()
+  duplicator.SetInputImage( img )
+  duplicator.Update()
+  return duplicator.GetOutput()
+
 #%%
 
 
@@ -694,21 +787,25 @@ if __name__ == "__main__":
 
   # Useful shortcut
   ShortType = itk.ctype('short')
+  UShortType = itk.ctype('unsigned short')
   UCType = itk.ctype('unsigned char')
   FType = itk.ctype('float')
+  ULType = itk.ctype('unsigned long')
   FloatImageType = itk.Image[FType,3]
+  ShortImageType = itk.Image[ShortType,3]
+  UCImageType = itk.Image[UCType,3]
+  ULImageType = itk.Image[ULType,3]
 
   # Read Dicoms Series and turn it into 3D object
   inputCT, Inputmetadata = dicomsTo3D(DicomDir, ShortType)
+  showSome(inputCT,50)
 
   print("Preprocessing")
 #%%
 
-  showSome(inputCT,50)
-
   # Preprocessing
   print("Thresholding input image")
-  thresholdedInputCT = thresholding(inputCT, lowerThreshold, upperThreshold) # Checked
+  thresholdedInputCT = thresholding(duplicate(inputCT, ShortImageType), lowerThreshold, upperThreshold) # Checked
 
   showSome(thresholdedInputCT, 50)
   smallScaleSheetnessImage = multiscaleSheetness(multiScaleInput = castImage(thresholdedInputCT, OutputType=FloatImageType),
@@ -716,19 +813,29 @@ if __name__ == "__main__":
                                                  SmoothingImageType = FloatImageType)
 
   showSome(smallScaleSheetnessImage,50)
-
+  # smallScaleSheetnessImage = cpp_smallScaleSheetnessImage
   print("Estimating soft-tissue voxels")
-  smScale = binaryThresholding(inputImage = smallScaleSheetnessImage,
-                               lowerThreshold = -0.05,
-                               upperThreshold = 0.05,
-                               outputImageType = UCType)
-  smScale = ConnectedComponents(inputImage = smScale,
-                                outputImageType = itk.ctype('unsigned long'))
-  smScale = RelabelComponents(inputImage = smScale,
-                              outputImageType = UCType)
-  softTissueEstimation = binaryThresholding(inputImage = smScale,
+  smScale_bin = binaryThresholding(inputImage = smallScaleSheetnessImage,
+                                   lowerThreshold = -0.05,
+                                   upperThreshold = 0.05,
+                                   outputImageType = UCType)
+  showSome(smScale_bin,50)
+  # itk.GetArrayFromImage(smScale_bin).tolist()==itk.GetArrayFromImage(cpp_thresA).tolist()
+  smScale_cc = ConnectedComponents(inputImage = smScale_bin,
+                                   outputImageType = itk.ctype('unsigned long')
+                                  )
+  showSome(smScale_cc,50)
+  # itk.GetArrayFromImage(castImage(smScale_cc,OutputType=UCImageType)).tolist()==itk.GetArrayFromImage(cpp_cc).tolist()
+  # smScale_cc=cpp_cc
+  smScale_rc = RelabelComponents(inputImage = smScale_cc,
+                                 outputImageType=None)
+  showSome(smScale_rc,50)
+  # itk.GetArrayFromImage(smScale_rc).tolist()==itk.GetArrayFromImage(cpp_rc).astype(np.uint64).tolist()
+  # smScale_rc=cpp_rc
+  softTissueEstimation = binaryThresholding(inputImage = smScale_rc,
                                             lowerThreshold = 1,
                                             upperThreshold = 1)
+  # itk.GetArrayFromImage(softTissueEstimation).tolist()==itk.GetArrayFromImage(cpp_soft).tolist()
   showSome(softTissueEstimation, 50)
 
   print("Estimating bone voxels")
@@ -743,28 +850,51 @@ if __name__ == "__main__":
   #                                   return_distances=True).astype(np.float64)
   boneDist = DistanceTransform(boneEstimation.astype(np.int32)).astype(np.float32)
   boneDist = itk.GetImageFromArray(boneDist)
+  boneDist.SetOrigin(inputCT.GetOrigin())
+  boneDist.SetSpacing(inputCT.GetSpacing())
+  boneDist.SetDirection(inputCT.GetDirection())
+  showSome(boneDist, 50)
   autoROI  = binaryThresholding(inputImage = boneDist,
                                 lowerThreshold = 0,
                                 upperThreshold = 30,
                                 outputImageType = UCType)
+  showSome(autoROI, 50)
+
   print("Unsharp masking")
   InputCT_float = castImage(inputCT, OutputType=FloatImageType)
+  # itk.GetArrayFromImage(InputCT_float).tolist()==itk.GetArrayFromImage(cpp_inputCTfloat).tolist()
+
   # I*G (discrete gauss)
-  m_DiffusionFilter = Gaussian(GaussInput = InputCT_float, sigma = 1.0)
+  m_DiffusionFilter = Gaussian(GaussInput = InputCT_float,
+                               sigma = 1.0)
+  # itk.GetArrayFromImage(m_DiffusionFilter).tolist()==itk.GetArrayFromImage(cpp_m_DiffusionFilter).tolist()
+  showSome(m_DiffusionFilter, 50)
+
   # I - (I*G)
   m_SubstractFilter = substract(InputCT_float, m_DiffusionFilter)
+  # itk.GetArrayFromImage(m_SubstractFilter).tolist()==itk.GetArrayFromImage(cpp_m_SubstractFilter).tolist()
+  showSome(m_SubstractFilter, 50)
+
   # k(I-(I*G))
   m_MultiplyFilter = linearTransform(m_SubstractFilter,
                                      scale = 10.,
                                      shift = 0.)
+  # itk.GetArrayFromImage(m_MultiplyFilter).tolist()==itk.GetArrayFromImage(cpp_m_MultiplyFilter).tolist()
+  showSome(m_MultiplyFilter, 50)
+
   # I+k*(I-(I*G))
   inputCTUnsharpMasked = add(InputCT_float, m_MultiplyFilter)
+  # itk.GetArrayFromImage(inputCTUnsharpMasked).tolist()==itk.GetArrayFromImage(cpp_inputCTUnsharpedMasked).tolist()
+  showSome(inputCTUnsharpMasked, 50)
+
   print("Computing multiscale sheetness measure at %d scales" % len(sigmasLargeScale))
   Sheetness = multiscaleSheetness(multiScaleInput=inputCTUnsharpMasked,
                                   scales = sigmasLargeScale,
                                   SmoothingImageType = FloatImageType,
                                   roi = None)
   showSome(Sheetness, 50)
+  # plb.hist(itk.GetArrayFromImage(Sheetness).flatten()-itk.GetArrayFromImage(cpp_sheetness).flatten())
+
 #%%
   ###########
   # Segment #
@@ -776,6 +906,7 @@ if __name__ == "__main__":
                           ROI = autoROI
                           )
   showSome(gcResult, 50)
+  # showSome(cpp_gc, 50)
   # itk.GetArrayFromImage((gcResult)).tolist() == (itk.GetArrayFromImage(cpp_gc)).tolist()
 #%%
   ###################
@@ -787,13 +918,16 @@ if __name__ == "__main__":
 
   print("Computing Connected Components")
   mainIslands = ConnectedComponents(inputImage = gcResult,
-                                    outputImageType = UCType)
+                                    outputImageType = ULType)
+  # itk.GetArrayFromImage((mainIslands)).tolist() == (itk.GetArrayFromImage(cpp_mainIslands)).tolist()
   showSome(mainIslands, 50)
   print("Erosion + Connected Components, ball radius=%d"% EROSION_RADIUS)
   eroded_gc = erosion(gcResult, EROSION_RADIUS, UCType)
+  # itk.GetArrayFromImage((eroded_gc)).tolist() == (itk.GetArrayFromImage(cpp_eroded)).tolist()
   showSome(eroded_gc, 50)
   subIslands = ConnectedComponents(inputImage = eroded_gc,
-                                   outputImageType = UCType)
+                                   outputImageType = ULType)
+  # itk.GetArrayFromImage((subIslands)).tolist() == (itk.GetArrayFromImage(cpp_subIslands)).tolist()
   showSome(subIslands, 50)
   print("Discovering main islands containg bottlenecks")
 
@@ -831,12 +965,18 @@ if __name__ == "__main__":
     gcOutput = RefineSegmentation(islandImage = subIslands,
                                   subIslandLabels=[i1, i2],
                                   ROI = roiSub)
+    # itk.GetArrayFromImage((gcOutput)).tolist() == (itk.GetArrayFromImage(cpp_gcOutput)).tolist()
     # updateResult
     uniqueLabel = np.max(mainArray) + 1
     gcValues = itk.GetArrayFromImage(gcOutput)
     mainArray[gcValues==1] = uniqueLabel # result
-  finalResult = RelabelComponents(inputImage = itk.GetImageFromArray(mainArray),
+  relabelled_mainIslands = itk.GetImageFromArray(mainArray)
+  relabelled_mainIslands.SetOrigin(mainIslands.GetOrigin())
+  relabelled_mainIslands.SetSpacing(mainIslands.GetSpacing())
+  relabelled_mainIslands.SetDirection(mainIslands.GetDirection())
+  finalResult = RelabelComponents(inputImage = relabelled_mainIslands,
                                   outputImageType = UCType)
+  # itk.GetArrayFromImage((finalResult)).tolist() == (itk.GetArrayFromImage(cpp_finalResult)).tolist()
   showSome(finalResult, 50)
 #%%
   # Save results
@@ -847,22 +987,43 @@ if __name__ == "__main__":
 
 
 
-
 ####################
 # WORK IN PROGRESS #
 ####################
 #%%
+import pandas as pd
 import os
-os.listdir("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/")
 # Check Pre-Processing
+# cpp_inputCT = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/PrimoEsempio.nii", t = 'short')
 # Ok: cpp_thresholded = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/thresholdedInputCT.nii", t = 'short')
 # Ok: cpp_thresholdedCast = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/thresholdedInputCT_short.nii", t = 'float')
-# Ok within float precision: cpp_SmoothingA = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/SmoothinRecursive1.500000.nii", t= 'float')
-# Ok within float precision: cpp_smallScaleSheetnessImage = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/smallScaleSheetnessImage.nii", t= 'float')
-# Ok within float precision: cpp_soft = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/soft-tissue-est.nii")
-# Ok within float precision: cpp_boneEstimation = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/boneEstimation.nii")
-# Ok within float precision: cpp_chamferResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/chamferResult.nii", t = 'float')
-# Ok within previous float precision: cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
+# Ok: cpp_RightBeforeSmoothingA = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/RightBeforeSmoothinRecursive1.500000.nii", t= 'float')
+# Ok: cpp_SmoothingA = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/SmoothinRecursive1.500000.nii", t= 'float')
+# Ok: if e-5 differences taken (floating precision between numpy and c++): cpp_hxx = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/hxx_1.500000.txt", header=None)
+# Ok: if e-5 differences taken (floating precision between numpy and c++): cpp_hxy = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/hxy_1.500000.txt", header=None)
+# Ok: if e-5 differences taken (floating precision between numpy and c++): cpp_hxz = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/hxz_1.500000.txt", header=None)
+# Ok: if e-5 differences taken (floating precision between numpy and c++): cpp_hyy = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/hyy_1.500000.txt", header=None)
+# Ok: if e-5 differences taken (floating precision between numpy and c++): cpp_hyz = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/hyz_1.500000.txt", header=None)
+# Ok: if e-5 differences taken (floating precision between numpy and c++): cpp_hzz = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/hzz_1.500000.txt", header=None)
+# Ok within float precision (few mismatchs due to arccos computations and sorting, they all depend on low precision: e.g. when sorting eigenvalues by abs you can have almost same abs value, only differences at 1e-4 or 1e-5)
+# cpp_eigs = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/eigs_1.500000.txt", header=None)
+# Ok within float precision throughout computation: cpp_rs = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/rs_1.500000.txt", header=None)
+# Ok within float precision(0.0002): cpp_noise = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/noise_1.500000.txt", header=None)
+# Ok within float precision throughout computation: cpp_meas = pd.read_csv("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/meas_1.500000.txt", header=None)
+# Ok within float precision throughout computation: cpp_smallScaleSheetnessImage = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/smallScaleSheetnessImage.nii", t= 'float')
+# Ok: cpp_thresA = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/smScale_bin.nii")
+# Ok: cpp_cc = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/smScale_cc.nii")
+# Not Ok but because the ordering of labels with same counts is not the same (does not matter): cpp_rc = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/smScale_rc.nii", "float")
+# Ok: cpp_soft = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/softTissueEstimation_.nii")
+# Ok: cpp_boneEstimation = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/boneEstimation.nii")
+# Ok: cpp_chamferResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/chamferResult.nii", t = 'float')
+# Ok: cpp_roi = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/roi.nii")
+# Ok: cpp_inputCTfloat = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/InputCT_float.nii", t='float')
+# Ok: cpp_m_DiffusionFilter = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/m_DiffusionFilter.nii", t='float')
+# Ok: cpp_m_SubstractFilter = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/m_SubstractFilter.nii", t='float')
+# Ok: cpp_m_MultiplyFilter = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/m_MultiplyFilter.nii", t='float')
+# Ok: cpp_inputCTUnsharpedMasked = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/inputCTUnsharpedMasked.nii", t='float')
+# Ok within float precision throughout computation: cpp_sheetness = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/sheetnessRightBeforeSegm.nii", t = 'float')
 
 # Check Segmentation
 # Starting from:
@@ -891,17 +1052,6 @@ os.listdir("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/
 # Ok: cpp_updateResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/resultAfter_5_1_1.nii")
 # Ok: cpp_finalResult = Read3DNifti("/home/PERSONALE/daniele.dallolio3/LOCAL_TOOLS/bone-segmentation/src/proposed-method/src/build/tempfld/finalResult.nii")
 # Done
-
-prova_me = itk.GetArrayFromImage(finalResult)
-prova_cpp = itk.GetArrayFromImage(cpp_finalResult)
-# showSome(mainIslands,50)
-# showSome(cpp_eroded,50)
-np.unique(prova_me == prova_cpp)
-np.where(prova_me != prova_cpp)
-np.unique(prova_me).max()
-np.unique(prova_cpp).max()
-np.unique(prova_me).min()
-np.unique(prova_cpp).min()
 
 #%%
 
