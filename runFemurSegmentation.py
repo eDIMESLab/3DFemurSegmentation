@@ -1,5 +1,6 @@
 import itk
 import numpy as np
+np.seterr(divide='ignore', invalid='ignore')
 import ctypes
 import matplotlib.pylab as plb
 from scipy.ndimage.morphology import distance_transform_cdt
