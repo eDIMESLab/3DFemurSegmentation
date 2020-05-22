@@ -55,7 +55,7 @@
 	...
 
 	DBlock<MyType> *dblock = new DBlock<MyType>(BLOCK_SIZE);
-	
+
 	// adding items
 	for (int i=0; i<sizeof(array); i++)
 	{
@@ -103,7 +103,7 @@ public:
 	   (optionally) the pointer to the function which
 	   will be called if allocation failed; the message
 	   passed to this function is "Not enough memory!" */
-	Block(int size, void (*err_function)(char *) = NULL) { first = last = NULL; block_size = size; error_function = err_function; }
+	Block(int size, void (*err_function)(const char *) = NULL) { first = last = NULL; block_size = size; error_function = err_function; }
 
 	/* Destructor. Deallocates all items added so far */
 	~Block() { while (first) { block *next = first -> next; delete[] ((char*)first); first = next; } }
@@ -206,7 +206,7 @@ public:
 	   (optionally) the pointer to the function which
 	   will be called if allocation failed; the message
 	   passed to this function is "Not enough memory!" */
-	DBlock(int size, void (*err_function)(char *) = NULL) { first = NULL; first_free = NULL; block_size = size; error_function = err_function; }
+	DBlock(int size, void (*err_function)(const char *) = NULL) { first = NULL; first_free = NULL; block_size = size; error_function = err_function; }
 
 	/* Destructor. Deallocates all items added so far */
 	~DBlock() { while (first) { block *next = first -> next; delete[] ((char*)first); first = next; } }
@@ -260,7 +260,7 @@ private:
 	block		*first;
 	block_item	*first_free;
 
-	void	(*error_function)(char *);
+	void	(*error_function)(const char *);
 };
 
 

@@ -15,13 +15,11 @@
 
 
 
-| **Authors**  | **Project** |
-|:------------:|:-----------:|
-| [**D. Dall'Olio**](https://github.com/DanieleDallOlio)  |  3DFemurSegmentation  |
-| [**N. Curti**](https://github.com/Nico-Curti)  |  3DFemurSegmentation  |
+| **Authors**  | **Project** |  **Build Status** |
+|:------------:|:-----------:|:-----------------:|
+| [**D. Dall'Olio**](https://github.com/DanieleDallOlio) <br/> [**N. Curti**](https://github.com/Nico-Curti)  |  **3DFemurSegmentation**  | **Linux/MacOS** : [![travis](https://travis-ci.com/eDIMESLab/3DFemurSegmentation.svg?branch=master)](https://travis-ci.com/eDIMESLab/3DFemurSegmentation) <br/> **Windows** : [![appveyor](https://ci.appveyor.com/api/projects/status/g3wjvsf4eqo6ts96?svg=true)](https://ci.appveyor.com/project/Nico-Curti/3dfemursegmentation) |
 
-
-Make sure to install conda before going further. 
+Make sure to install conda before going further.
 
 Clone the repository:
 ```console
@@ -38,16 +36,18 @@ Then, activate the environment and build Cython libraries:
 username@local:~/3DFemurSegmentation$ conda activate itk
 username@local:~/3DFemurSegmentation$ python setup.py develop --user
 ```
-Make sure to add ~/3DFemurSegmentation/lib/ to your Python library path before running. On Ubuntu OS, type:
+
+Make sure to add `~/3DFemurSegmentation/lib/` to your Python library path before running. On Ubuntu OS, type:
+
 ```console
 username@local:~/3DFemurSegmentation$ export PYTHONPATH=$PYTHONPATH:~/3DFemurSegmentation/lib/
 ```
 
 Now, run the unsupervised segmentation by supplying input DICOMs directory and output DICOMs directory:
+
 ```console
 username@local:~/3DFemurSegmentation$ python runFemurSegmentation.py --indir ./indir_example  --outdir ./outdir_example
 ```
-
 
 ## Authors
 
@@ -59,8 +59,8 @@ username@local:~/3DFemurSegmentation$ python runFemurSegmentation.py --indir ./i
 Thanks goes to all contributors of this project.
 
 ## References
+
 <a id="1">[1]</a>
 Krčah, M., Székely, G., Blanc, R.
 Fully automatic and fast segmentation of the femur bone from 3D-CT images with no shape prior
 2011 IEEE International Symposium on Biomedical Imaging: From Nano to Macro, Chicago, IL, 2011, pp. 2087-2090. [doi](https://doi.org/10.1109/ISBI.2011.5872823)
-

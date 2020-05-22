@@ -106,7 +106,7 @@ except IOError:
 about = {'__version__' : VERSION}
 
 if 'GCC' in CPP_COMPILER or 'Clang' in CPP_COMPILER:
-  cpp_compiler_args = ['-std=c++1z', '-std=gnu++1z', '-g0']
+  cpp_compiler_args = ['-std=c++11', '-std=gnu++11', '-g0']
   compile_args = [ '-Wno-unused-function',
                    '-Wno-narrowing',
                    '-Wall',
