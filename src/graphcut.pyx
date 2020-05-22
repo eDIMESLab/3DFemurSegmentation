@@ -4,14 +4,14 @@ cimport numpy as np
 from graphcut cimport GraphCutMaxFlow
 
 def RunGraphCut(unsigned int _totalPixelsInROI,
-                np.uint32_t[::1] dataCostPixels,
-                np.uint32_t[::1] flat_dataCostSource,
-                np.uint32_t[::1] flat_dataCostSink,
+                unsigned int[::1] dataCostPixels,
+                unsigned int[::1] flat_dataCostSource,
+                unsigned int[::1] flat_dataCostSink,
                 unsigned int _totalNeighbors,
-                np.uint32_t[::1] CentersPixels,
-                np.uint32_t[::1] NeighborsPixels,
-                np.uint32_t[::1] flat_smoothCostFromCenter,
-                np.uint32_t[::1] flat_smoothCostToCenter):
+                unsigned int[::1] CentersPixels,
+                unsigned int[::1] NeighborsPixels,
+                unsigned int[::1] flat_smoothCostFromCenter,
+                unsigned int[::1] flat_smoothCostToCenter):
   cdef unsigned int * result = GraphCutMaxFlow(_totalPixelsInROI,
                                                & dataCostPixels[0],
                                                & flat_dataCostSource[0],

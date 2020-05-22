@@ -4,10 +4,15 @@
 # python setup.py develop --user
 # cython distance_matrix.pyx -a
 
+import os
+import platform
+import numpy as np
+
 try:
   from setuptools import setup
   from setuptools import Extension
   from setuptools import find_packages
+
 except ImportError:
   from distutils.core import setup
   from distutils.core import Extension
@@ -15,9 +20,51 @@ except ImportError:
 
 from Cython.Distutils import build_ext
 from distutils.sysconfig import customize_compiler
-import numpy
-import os
-import platform
+
+def get_requires (requirements_filename):
+  '''
+  What packages are required for this module to be executed?
+
+  Parameters
+  ----------
+    requirements_filename : str
+      filename of requirements (e.g requirements.txt)
+
+  Returns
+  -------
+    requirements : list
+      list of required packages
+  '''
+  with open(requirements_filename, 'r') as fp:
+    requirements = fp.read()
+
+  return list(filter(lambda x: x != '', requirements.split()))
+
+def read_description (readme_filename):
+  '''
+  Description package from filename
+
+  Parameters
+  ----------
+    readme_filename : str
+      filename with readme information (e.g README.md)
+
+  Returns
+  -------
+    description : str
+      str with description
+  '''
+
+  try:
+
+    with open(readme_filename, 'r') as fp:
+      description = '\n'
+      description += fp.read()
+
+    return description
+
+  except IOError:
+    return ''
 
 class _build_ext (build_ext):
   '''
@@ -31,20 +78,8 @@ class _build_ext (build_ext):
       pass
     build_ext.build_extensions(self)
 
-def read_description (readme_filename):
-  '''
-  Description package from filename
-  '''
 
-  try:
-
-    with open(readme_filename, 'r') as fp:
-      description = '\n'
-      description += fp.read()
-
-  except Exception:
-    return ''
-
+here = os.path.abspath(os.path.dirname(__file__))
 
 NAME = '3DFemurSegmentation'
 DESCRIPTION = 'Python implementation of Graph-cut based 3D Segmentation of Femur'
@@ -52,22 +87,23 @@ URL = 'https://github.com/eDIMESLab/3DFemurSegmentation'
 EMAIL = ['daniele.dallolio@unibo.it', 'nico.curti2@unibo.it']
 AUTHOR = ["Daniele Dall'Olio", 'Nico Curti']
 REQUIRES_PYTHON = '>=3.5'
-VERSION = None
+VERSION = '1.0.0'
 KEYWORDS = "graphcut maxflow femur segmentation"
 
 CPP_COMPILER = platform.python_compiler()
 README_FILENAME = os.path.join(os.getcwd(), 'README.md')
-# REQUIREMENTS_FILENAME =
+REQUIREMENTS_FILENAME = os.path.join(here, 'requirements.txt')
 # VERSION_FILENAME =
 
 # Import the README and use it as the long-description.
 # Note: this will only work if 'README.md' is present in your MANIFEST.in file!
 try:
-  LONG_DESCRIPTION = read_description(README_FILENAME)
+  LONG_DESCRIPTION = DESCRIPTION#read_description(README_FILENAME)
 
-except FileNotFoundError:
+except IOError:
   LONG_DESCRIPTION = DESCRIPTION
 
+about = {'__version__' : VERSION}
 
 if 'GCC' in CPP_COMPILER or 'Clang' in CPP_COMPILER:
   cpp_compiler_args = ['-std=c++1z', '-std=gnu++1z', '-g0']
@@ -97,7 +133,7 @@ whole_compiler_args = sum([cpp_compiler_args, compile_args], [])
 ext_modules = [ Extension(name= '.'.join(['lib', 'fastDistMatrix']),
                           sources=[os.path.join(os.getcwd(), 'src', 'distance_matrix.pyx')],
                           libraries=[],
-                          include_dirs=[numpy.get_include()],
+                          include_dirs=[np.get_include()],
                           extra_compile_args = whole_compiler_args,
                           language='c++'
                           ),
@@ -108,7 +144,7 @@ ext_modules = [ Extension(name= '.'.join(['lib', 'fastDistMatrix']),
                           libraries=[],
                           library_dirs=[os.path.join('usr', 'lib'),
                                         os.path.join('usr', 'local', 'lib')],
-                          include_dirs=[numpy.get_include(),
+                          include_dirs=[np.get_include(),
                                         os.path.join(os.getcwd(), 'include'),
                                         os.path.join(os.getcwd(), 'maxflow-v3.01')
                                         ],
@@ -118,8 +154,8 @@ ext_modules = [ Extension(name= '.'.join(['lib', 'fastDistMatrix']),
             ]
 
 setup(
-        name='3DSegmentationSupport',
-        # version = ,
+        name                          = '{}Support'.format(NAME),
+        version                       = about['__version__'],
         description                   = DESCRIPTION,
         long_description              = LONG_DESCRIPTION,
         long_description_content_type = 'text/markdown',
@@ -127,13 +163,13 @@ setup(
         author_email                  = EMAIL,
         maintainer                    = AUTHOR,
         maintainer_email              = EMAIL,
-        # python_requires               = ,
-        # install_requires              = get_requires(REQUIREMENTS_FILENAME),
+        python_requires               = REQUIRES_PYTHON,
+        install_requires              = get_requires(REQUIREMENTS_FILENAME),
         url                           = URL,
         download_url                  = URL,
         keywords                      = KEYWORDS,
         # packages                      = find_packages(),
-        cmdclass = {'build_ext': _build_ext},
+        cmdclass                      = {'build_ext': _build_ext},
         license                       = 'MIT',
-        ext_modules = ext_modules
+        ext_modules                   = ext_modules
       )
