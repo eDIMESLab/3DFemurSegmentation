@@ -17,6 +17,7 @@ from Cython.Distutils import build_ext
 from distutils.sysconfig import customize_compiler
 import numpy
 import os
+import platform
 
 class _build_ext (build_ext):
   '''
@@ -54,7 +55,7 @@ REQUIRES_PYTHON = '>=3.5'
 VERSION = None
 KEYWORDS = "graphcut maxflow femur segmentation"
 
-# CPP_COMPILER = platform.python_compiler()
+CPP_COMPILER = platform.python_compiler()
 README_FILENAME = os.path.join(os.getcwd(), 'README.md')
 # REQUIREMENTS_FILENAME =
 # VERSION_FILENAME =
@@ -68,15 +69,36 @@ except FileNotFoundError:
   LONG_DESCRIPTION = DESCRIPTION
 
 
+if 'GCC' in CPP_COMPILER or 'Clang' in CPP_COMPILER:
+  cpp_compiler_args = ['-std=c++1z', '-std=gnu++1z', '-g0']
+  compile_args = [ '-Wno-unused-function',
+                   '-Wno-narrowing',
+                   '-Wall',
+                   '-Wextra',
+                   '-Wno-unused-result',
+                   '-Wno-unknown-pragmas',
+                   '-Wfatal-errors',
+                   '-Wpedantic',
+                   '-march=native',
+                   '-Wno-write-strings',
+                   '-Wno-overflow',
+                   '-Wno-parentheses',
+                   '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION'
+                 ]
+elif 'MSC' in CPP_COMPILER:
+  cpp_compiler_args = ['/std:c++latest',
+                       '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION']
+  compile_args = []
+else:
+  raise ValueError('Unknown c++ compiler arg')
+
+whole_compiler_args = sum([cpp_compiler_args, compile_args], [])
 
 ext_modules = [ Extension(name= '.'.join(['lib', 'fastDistMatrix']),
                           sources=[os.path.join(os.getcwd(), 'src', 'distance_matrix.pyx')],
                           libraries=[],
                           include_dirs=[numpy.get_include()],
-                          extra_compile_args = ['-g0',
-                                                '-Ofast',
-                                                '-Wno-unused-function',
-                                                '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION'],
+                          extra_compile_args = whole_compiler_args,
                           language='c++'
                           ),
                 Extension(name= '.'.join(['lib', 'GraphCutSupport']),
@@ -90,11 +112,7 @@ ext_modules = [ Extension(name= '.'.join(['lib', 'fastDistMatrix']),
                                         os.path.join(os.getcwd(), 'include'),
                                         os.path.join(os.getcwd(), 'maxflow-v3.01')
                                         ],
-                          extra_compile_args = ['-g0',
-                                                '-Ofast',
-                                                '-Wno-unused-function',
-                                                '-Wno-write-strings',
-                                                '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION'],
+                          extra_compile_args = whole_compiler_args,
                           language='c++'
                           )
             ]
