@@ -379,7 +379,6 @@ before_install:
   - python3 -m pip install --user cython==0.29
   - python3 -m pip install --user scipy
   - python3 -m pip install --user itk
-  - python3 -m pip install --user matplotlib
 
 install:
   # CMake upgrade
