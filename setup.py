@@ -73,7 +73,7 @@ class _build_ext (build_ext):
   def build_extensions (self):
     customize_compiler(self.compiler)
     try:
-      self.compiler.compiler_so.remove('-Wstrict-prototypes')
+      self.compiler.compiler_so.remove('-Wstrict-prototypes', '-Wdate-time')
     except (AttributeError, ValueError):
       pass
     build_ext.build_extensions(self)

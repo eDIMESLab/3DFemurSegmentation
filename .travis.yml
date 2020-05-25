@@ -378,8 +378,6 @@ matrix:
         - MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
 
   allow_failures:
-    - name: ubuntu 14.04 - clang@3.8 & python@3
-    - name: ubuntu 14.04 - gcc@4.8.5 & python@3
     - name: macOS - clang@7.0 & python@3
 
 
@@ -389,9 +387,9 @@ before_install:
   - python3 -m pip install --upgrade pip --user
 
   # install python packages
+  - python3 -m pip install --user scipy
   - python3 -m pip install --user numpy
   - python3 -m pip install --user cython==0.29
-  - python3 -m pip install --user scipy
   - python3 -m pip install --user itk
 
 install:
