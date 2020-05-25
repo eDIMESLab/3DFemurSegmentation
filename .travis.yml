@@ -16,6 +16,7 @@ matrix:
           packages:
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL=""
 
@@ -31,6 +32,7 @@ matrix:
             - g++-4.8
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=gcc-4.8 && CXX=g++-4.8"
 
@@ -46,6 +48,7 @@ matrix:
             - g++-4.9
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=gcc-4.9 && CXX=g++-4.9"
 
@@ -61,6 +64,7 @@ matrix:
             - g++-5
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
 
@@ -76,6 +80,7 @@ matrix:
             - g++-6
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
 
@@ -91,6 +96,7 @@ matrix:
             - g++-7
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
 
@@ -106,6 +112,7 @@ matrix:
             - g++-8
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
 
@@ -129,6 +136,7 @@ matrix:
             - libc++abi-dev
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=clang-3.6 && CXX=clang++-3.6"
         - LINKER_FLAGS="-stdlib=libstdc++ -lc++abi"
@@ -151,6 +159,7 @@ matrix:
             - libc++abi-dev
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=clang-3.8 && CXX=clang++-3.8"
         - LINKER_FLAGS="-stdlib=libc++ -lc++abi"
@@ -174,6 +183,7 @@ matrix:
             - libc++abi-dev
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=clang-3.9 && CXX=clang++-3.9"
         - LINKER_FLAGS="-stdlib=libc++ -lc++abi"
@@ -197,7 +207,7 @@ matrix:
             - libc++abi-dev
             - python3.5
             - python3-pip
-
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=clang-4.0 && CXX=clang++-4.0"
         - LINKER_FLAGS="-stdlib=libc++ -lc++abi"
@@ -217,7 +227,7 @@ matrix:
             - libclang-5.0-dev
             - python3.5
             - python3-pip
-
+            - python3-setuptools
       env:
         - MATRIX_EVAL="sudo apt install libjsoncpp0 && CC=clang-5.0 && CXX=clang++-5.0"
         - LINKER_FLAGS="-stdlib=libc++ -lc++abi"
@@ -238,7 +248,7 @@ matrix:
             - libclang-6.0-dev
             - python3.5
             - python3-pip
-
+            - python3-setuptools
       env:
         - MATRIX_EVAL="sudo apt install libjsoncpp0 && CC=clang-6.0 && CXX=clang++-6.0"
         - LINKER_FLAGS="-stdlib=libc++ -lc++abi"
@@ -259,7 +269,7 @@ matrix:
             - libclang-7-dev
             - python3.5
             - python3-pip
-
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=clang-7 && CXX=clang++-7"
         - LINKER_FLAGS="-stdlib=libc++ -lc++abi"
@@ -275,6 +285,7 @@ matrix:
           packages:
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="brew update && brew reinstall gcc@7 gcc && CC=gcc-7 && CXX=g++-7"
         - COMPILER_ID="gcc"
@@ -288,6 +299,7 @@ matrix:
           packages:
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="brew update && brew reinstall gcc@8 gcc && CC=gcc-8 && CXX=g++-8"
 
@@ -306,6 +318,7 @@ matrix:
             - libc++abi-dev
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL=""
         - LINKER_FLAGS="-stdlib=libc++ -lc++abi"
@@ -325,6 +338,7 @@ matrix:
             - clang-7.0
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="brew update && brew install llvm && CC=clang-7.0 && CXX=clang++-7.0"
         - LINKER_FLAGS="-stdlib=libc++ -lc++abi"
@@ -342,6 +356,7 @@ matrix:
             - g++-8
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
 
@@ -358,6 +373,7 @@ matrix:
             - g++-8
             - python3.5
             - python3-pip
+            - python3-setuptools
       env:
         - MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
 
@@ -369,8 +385,6 @@ matrix:
 
 before_install:
   - travis_retry eval "${MATRIX_EVAL}"
-  - pip install --user codecov
-  - sudo pip install -r requirements.txt
   - python3 --version
   - python3 -m pip install --upgrade pip --user
 
