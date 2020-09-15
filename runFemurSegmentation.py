@@ -73,7 +73,7 @@ def dicomsTo3D(dirname, ImageType):
   imgs_seq = reader.GetOutput()
   metadataArray = reader.GetMetaDataDictionaryArray()
   # Store metadata as a list of dictionaries (more readable and less issues)
-  dictionary_keys = filter(lambda x: not "ITK_" in x, dicom_reader.GetMetaDataDictionary().GetKeys())
+  dictionary_keys = list(filter(lambda x: not "ITK_" in x, dicom_reader.GetMetaDataDictionary().GetKeys()))
   metadata = [ {tag:fdcm[tag] for tag in dictionary_keys} for fdcm in metadataArray ]
   return imgs_seq, metadata
 
@@ -181,6 +181,7 @@ def computeEigenvalues(SmoothImg,
 
 
 def GetEigenValues(M11, M12, M13, M22, M23, M33, roi=None):
+  EigenValues = np.zeros(M11.shape + (4,))
   # Select roi
   if not roi is None:
     inside = roi!=0
@@ -215,7 +216,6 @@ def GetEigenValues(M11, M12, M13, M22, M23, M33, roi=None):
   l2[condB], l3[condB] = l3[condB], l2[condB]
   condC = np.abs(l1) > np.abs(l2)
   l1[condC], l2[condC] = l2[condC], l1[condC]
-  EigenValues = np.zeros(M11.shape + (4,))
   if not roi is None:
     EigenValues[inside,0] = l1
     EigenValues[inside,1] = l2
@@ -847,7 +847,7 @@ if __name__ == "__main__":
   Sheetness = multiscaleSheetness(multiScaleInput=inputCTUnsharpMasked,
                                   scales = sigmasLargeScale,
                                   SmoothingImageType = FloatImageType,
-                                  roi = None)
+                                  roi = autoROI)
   # showSome(Sheetness, 50)
 #%%
   ###########
