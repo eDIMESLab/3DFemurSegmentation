@@ -18,7 +18,7 @@ long * ManhattanChamferDistance ( long * im,
   y = shapeY + 1L;
   x = shapeX + 1L;
   zy = z*y;
-  std :: long * imDist;
+  long * imDist;
   imDist = new long[L];
   std :: fill_n(imDist, L, pad);
   long d, dmw, dmwh, wmh, h, hm, w, wm;
