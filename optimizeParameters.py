@@ -523,8 +523,14 @@ def DistanceTransform(ChamferInput):
   _infinityDistance = np.sum(ChamferInput.shape) + 1
   distanceMap[ChamferInput == 0] = _infinityDistance
   distanceMapPad = np.pad(distanceMap, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
-  distanceMapPad_flat = distanceMapPad.flatten()
-  distanceMap = fastDistMatrix.ManhattanChamferDistance(distanceMapPad_flat, len(distanceMapPad_flat), distanceMap.shape)
+  distanceMapPad_flat = distanceMapPad.flatten().astype(np.int32)
+  distanceMap = fastDistMatrix.ComputeChamferDistance(distanceMapPad_flat,
+                                                      len(distanceMapPad_flat),
+                                                      _infinityDistance,
+                                                      distanceMap.shape[0],
+                                                      distanceMap.shape[1],
+                                                      distanceMap.shape[2]
+                                                      )
   distanceMap = distanceMap.reshape(distanceMapPad.shape)
   distanceMap = distanceMap[1:-1, 1:-1, 1:-1].copy()
   return distanceMap

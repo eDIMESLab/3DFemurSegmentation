@@ -1,8 +1,10 @@
 #include <iostream>
 #include <algorithm>
+#include <memory>
 
 long * ManhattanChamferDistance ( long * im,
                                   unsigned int L,
+                                  long pad,
                                   long shapeZ,
                                   long shapeY,
                                   long shapeX,
@@ -19,7 +21,7 @@ long * ManhattanChamferDistance ( long * im,
   zy = z*y;
   std :: unique_ptr < long[] > imDist;
   imDist.reset(new long[L]);
-  std :: fill_n(imDist.get(), L, 0L);
+  std :: fill_n(imDist.get(), L, pad);
   long d, dmw, dmwh, wmh, h, hm, w, wm;
   for ( long i=1L; i<z; ++i ) {
     d = i*zy;
