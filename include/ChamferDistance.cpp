@@ -2,8 +2,6 @@
 #include <algorithm>
 
 long * ManhattanChamferDistance ( long * im,
-                                  unsigned int L,
-                                  long pad,
                                   long shapeZ,
                                   long shapeY,
                                   long shapeX,
@@ -18,9 +16,6 @@ long * ManhattanChamferDistance ( long * im,
   y = shapeY + 1L;
   x = shapeX + 1L;
   zy = z*y;
-  long * imDist;
-  imDist = new long[L];
-  std :: fill_n(imDist, L, pad);
   long d, dmw, dmwh, wmh, h, hm, w, wm;
   for ( long i=1L; i<z; ++i ) {
     d = i*zy;
@@ -33,10 +28,10 @@ long * ManhattanChamferDistance ( long * im,
         hm = h - 1L; // position: (k-1) + j*y + i*zy
         wmh = wm + k; // position: k + (j-1)*y + i*zy
         dmwh = dmw + k; // position: k + j*y + (i-1)*zy
-        imDist[h] = std :: min({im[h],
-                                im[hm] + weight,
-                                im[wmh] + weight,
-                                im[dmwh] + weight});
+        im[h] = std :: min({im[h],
+                            im[hm] + weight,
+                            im[wmh] + weight,
+                            im[dmwh] + weight});
       }
     }
   }
@@ -52,13 +47,13 @@ long * ManhattanChamferDistance ( long * im,
         hm = h + 1L; // position: (k+1) + j*y + i*zy
         wmh = wm + k; // position: k + (j+1)*y + i*zy
         dmwh = dmw + k; // position: k + j*y + (i+1)*zy
-        imDist[h] = std :: min({imDist[h],
-                                imDist[hm] + weight,
-                                imDist[wmh] + weight,
-                                imDist[dmwh] + weight});
+        im[h] = std :: min({im[h],
+                            im[hm] + weight,
+                            im[wmh] + weight,
+                            im[dmwh] + weight});
       }
     }
   }
 
-  return imDist;
+  return im;
 }
