@@ -8,52 +8,51 @@ long * ManhattanChamferDistance ( long * im,
                                   long weight=1L
                                 )
 {
-  long z;
-  long y;
-  long x;
-  long xy;
-  z = shapeZ + 1L;
-  y = shapeY + 1L;
-  x = shapeX + 1L;
-  xy = x*y;
-  long d, dmw, dmwh, wmh, h, hm, w, wm;
+  long depth;
+  long height;
+  long width;
+  long area;
+  depth  = shapeZ + 1L;
+  height = shapeY + 1L;
+  width  = shapeX + 1L;
+  area   = width*height;
+  long trail_j, trail_k, trail_jk;
+  long pos, pos_i, pos_j, pos_k;
   long pixel;
-  for ( long i=1L; i<z; ++i ) {
-    d = i*xy;
-    for ( long j=1L; j<y; ++j ) {
-      w = d + j*x;
-      wm = w - x;
-      dmw = w - xy;
-      for ( long k=1L; k<x; ++k ) {
-        h = w + k; // position: k + j*x + i*xy
-        hm = h - 1L; // position: (k-1) + j*x + i*xy
-        wmh = wm + k; // position: k + (j-1)*x + i*xy
-        dmwh = dmw + k; // position: k + j*x + (i-1)*xy
-        pixel = std :: min({im[h],
-                            im[hm] + weight,
-                            im[wmh] + weight,
-                            im[dmwh] + weight});
-        im[h] = pixel;
+  for ( long k=1L; k<depth; ++k ) {
+    trail_k = k*area;
+    for ( long j=1L; j<height; ++j ) {
+      trail_j = j*width;
+      trail_jk = trail_j + trail_k;
+      for ( long i=1L; i<width; ++i ) {
+        pos = i + trail_jk;  // [i,j,k] == i + j*width + k*area
+        pos_i = pos - 1;     // [i-1,j,k] == (i-1) + j*width + k*area
+        pos_j = pos - width; // [i,j-1,k] == i + (j-1)*width + k*area
+        pos_k = pos - area;  // [i,j,k-1] == i + j*width + (k-1)*area
+        pixel = std :: min({im[pos],
+                            im[pos_i] + weight,
+                            im[pos_j] + weight,
+                            im[pos_k] + weight});
+        im[pos] = pixel;
       }
     }
   }
 
-  for ( long i=z-1L; i>0L; --i ) {
-    d = i*xy;
-    for ( long j=y-1L; j>0L; --j ) {
-      w = d + j*x;
-      wm = w + x;
-      dmw = w + xy;
-      for ( long k=x-1L; k>0L; --k ) {
-        h = w + k; // position: k + j*x + i*xy
-        hm = h + 1L; // position: (k+1) + j*x + i*xy
-        wmh = wm + k; // position: k + (j+1)*x + i*xy
-        dmwh = dmw + k; // position: k + j*x + (i+1)*xy
-        pixel = std :: min({im[h],
-                            im[hm] + weight,
-                            im[wmh] + weight,
-                            im[dmwh] + weight});
-        im[h] = pixel;
+  for ( long k=shapeZ; k>0; --k ) {
+    trail_k = k*area;
+    for ( long j=shapeY; j>0; --j ) {
+      trail_j = j*width;
+      trail_jk = trail_j + trail_k;
+      for ( long i=shapeX; i>0; --i ) {
+        pos = i + trail_jk;  // [i,j,k] == i + j*width + k*area
+        pos_i = pos + 1;     // [i-1,j,k] == (i+1) + j*width + k*area
+        pos_j = pos + width; // [i,j-1,k] == i + (j+1)*width + k*area
+        pos_k = pos + area;  // [i,j,k-1] == i + j*width + (k+1)*area
+        pixel = std :: min({im[pos],
+                            im[pos_i] + weight,
+                            im[pos_j] + weight,
+                            im[pos_k] + weight});
+        im[pos] = pixel;
       }
     }
   }
