@@ -517,13 +517,13 @@ def linearTransform(Img,
 #   distanceMap = fastDistMatrix.ManhattanChamferDistance(distanceMapPad, distanceMap.shape)
 #   distanceMap = distanceMap[1:-1, 1:-1, 1:-1].copy()
 #   return distanceMap
-
+ChamferInput=boneEstimation.astype(np.int32)
 def DistanceTransform(ChamferInput):
   distanceMap = np.zeros(ChamferInput.shape)
   _infinityDistance = np.sum(ChamferInput.shape) + 1
   distanceMap[ChamferInput == 0] = _infinityDistance
   distanceMapPad = np.pad(distanceMap, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
-  distanceMapPad_flat = distanceMapPad.flatten().astype(np.int32)
+  distanceMapPad_flat = distanceMapPad.flatten().astype(np.int64)
   distanceMap = fastDistMatrix.ComputeChamferDistance(distanceMapPad_flat,
                                                       len(distanceMapPad_flat),
                                                       _infinityDistance,
