@@ -42,7 +42,7 @@ long * ManhattanChamferDistance ( long * im,
   for ( long k=shapeZ; k>0; --k ) {
     trail_k = k*area;
     for ( long j=shapeY; j>0; --j ) {
-      trail_j = j*width;
+      trail_j = j*widthplus;
       trail_jk = trail_j + trail_k;
       for ( long i=shapeX; i>0; --i ) {
         pos = i + trail_jk;  // [i,j,k] == i + j*width + k*area

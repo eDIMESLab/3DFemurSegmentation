@@ -534,10 +534,6 @@ def DistanceTransform(ChamferInput):
   distanceMap = distanceMap[1:-1, 1:-1, 1:-1].copy()
   return distanceMap
 
-prova = distanceMap.reshape(distanceMapPad.shape)
-prova = prova[1:-1, 1:-1, 1:-1].copy()
-plb.imshow(prova[50,:,:])
-
 depth  = distanceMap.shape[0] + 1
 height = distanceMap.shape[1] + 1
 width  = distanceMap.shape[2] + 1
@@ -550,14 +546,17 @@ for k in range(1,depth):
     trail_jk = trail_j + trail_k
     for i in range(1, width):
       pos = i + trail_jk
-      # pos_i = pos - 1
-      # pos_j = pos - width
-      # pos_k = pos - area
+      pos_i = pos + 1
+      pos_j = pos + (width+1)
+      pos_k = pos + area
       # pixel = std :: min({im[pos],
       #                     im[pos_i] + weight,
       #                     im[pos_j] + weight,
       #                     im[pos_k] + weight});
       assert im[pos] == distanceMapPad[k,j,i]
+      assert im[pos_i] == distanceMapPad[k,j,i+1]
+      assert im[pos_j] == distanceMapPad[k,j+1,i]
+      assert im[pos_k] == distanceMapPad[k+1,j,i]
 
 #%%
 ########################
