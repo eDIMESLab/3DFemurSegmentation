@@ -11,46 +11,49 @@ long * ManhattanChamferDistance ( long * im,
   long z;
   long y;
   long x;
-  long zy;
+  long xy;
   z = shapeZ + 1L;
   y = shapeY + 1L;
   x = shapeX + 1L;
-  zy = z*y;
+  xy = x*y;
   long d, dmw, dmwh, wmh, h, hm, w, wm;
+  long pixel;
   for ( long i=1L; i<z; ++i ) {
-    d = i*zy;
+    d = i*xy;
     for ( long j=1L; j<y; ++j ) {
-      w = d + j*y;
-      wm = w - y;
-      dmw = w - zy;
+      w = d + j*x;
+      wm = w - x;
+      dmw = w - xy;
       for ( long k=1L; k<x; ++k ) {
-        h = w + k; // position: k + j*y + i*zy
-        hm = h - 1L; // position: (k-1) + j*y + i*zy
-        wmh = wm + k; // position: k + (j-1)*y + i*zy
-        dmwh = dmw + k; // position: k + j*y + (i-1)*zy
-        im[h] = std :: min({im[h],
+        h = w + k; // position: k + j*x + i*xy
+        hm = h - 1L; // position: (k-1) + j*x + i*xy
+        wmh = wm + k; // position: k + (j-1)*x + i*xy
+        dmwh = dmw + k; // position: k + j*x + (i-1)*xy
+        pixel = std :: min({im[h],
                             im[hm] + weight,
                             im[wmh] + weight,
                             im[dmwh] + weight});
+        im[h] = pixel;
       }
     }
   }
 
   for ( long i=z-1L; i>0L; --i ) {
-    d = i*zy;
+    d = i*xy;
     for ( long j=y-1L; j>0L; --j ) {
-      w = d + j*y;
-      wm = w + y;
-      dmw = w + zy;
+      w = d + j*x;
+      wm = w + x;
+      dmw = w + xy;
       for ( long k=x-1L; k>0L; --k ) {
-        h = w + k; // position: k + j*y + i*zy
-        hm = h + 1L; // position: (k+1) + j*y + i*zy
-        wmh = wm + k; // position: k + (j+1)*y + i*zy
-        dmwh = dmw + k; // position: k + j*y + (i+1)*zy
-        im[h] = std :: min({im[h],
+        h = w + k; // position: k + j*x + i*xy
+        hm = h + 1L; // position: (k+1) + j*x + i*xy
+        wmh = wm + k; // position: k + (j+1)*x + i*xy
+        dmwh = dmw + k; // position: k + j*x + (i+1)*xy
+        pixel = std :: min({im[h],
                             im[hm] + weight,
                             im[wmh] + weight,
                             im[dmwh] + weight});
+        im[h] = pixel;
       }
     }
   }

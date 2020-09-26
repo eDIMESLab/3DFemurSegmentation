@@ -526,17 +526,32 @@ def DistanceTransform(ChamferInput):
   distanceMapPad_flat = distanceMapPad.flatten().astype(np.int_)
   distanceMap = fastDistMatrix.ComputeChamferDistance(distanceMapPad_flat,
                                                       len(distanceMapPad_flat),
-                                                      _infinityDistance,
                                                       distanceMap.shape[0],
                                                       distanceMap.shape[1],
                                                       distanceMap.shape[2]
                                                       )
-  distanceMap = np.array(distanceMap).reshape(distanceMapPad.shape)
+  distanceMap = distanceMap.reshape(distanceMapPad.shape)
   distanceMap = distanceMap[1:-1, 1:-1, 1:-1].copy()
   return distanceMap
 
-plb.imshow(distanceMapPad[400,:,:])
 
+  for ( long i=1L; i<z; ++i ) {
+    d = i*zy;
+    for ( long j=1L; j<y; ++j ) {
+      w = d + j*y;
+      wm = w - y;
+      dmw = w - zy;
+      for ( long k=1L; k<x; ++k ) {
+        h = w + k; // position: k + j*y + i*zy
+        hm = h - 1L; // position: (k-1) + j*y + i*zy
+        wmh = wm + k; // position: k + (j-1)*y + i*zy
+        dmwh = dmw + k; // position: k + j*y + (i-1)*zy
+        im[h] = std :: min({im[h],
+                            im[hm] + weight,
+                            im[wmh] + weight,
+                            im[dmwh] + weight});
+      }
+    }
 
 
 #%%
