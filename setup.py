@@ -93,7 +93,7 @@ KEYWORDS = "graphcut maxflow femur segmentation"
 
 CPP_COMPILER = platform.python_compiler()
 README_FILENAME = os.path.join(os.getcwd(), 'README.md')
-REQUIREMENTS_FILENAME = os.path.join(here, 'requirements.txt')
+# REQUIREMENTS_FILENAME = os.path.join(here, 'requirements.txt')
 # VERSION_FILENAME =
 
 # Import the README and use it as the long-description.
@@ -131,13 +131,21 @@ else:
 
 whole_compiler_args = sum([cpp_compiler_args, compile_args], [])
 
-ext_modules = [ Extension(name= '.'.join(['lib', 'fastDistMatrix']),
-                          sources=[os.path.join(os.getcwd(), 'src', 'distance_matrix.pyx')],
-                          libraries=[],
-                          include_dirs=[np.get_include()],
-                          extra_compile_args = whole_compiler_args,
-                          language='c++'
-                          ),
+ext_modules = [Extension(name= '.'.join(['lib', 'fastDistMatrix']),
+                         sources=[os.path.join(os.getcwd(), 'src', 'distance_matrix.pyx')],
+                         libraries=[],
+                         include_dirs=[np.get_include(),
+                                       os.path.join(os.getcwd(), 'include')],
+                         extra_compile_args = whole_compiler_args,
+                         language='c++'
+                         ),
+               # Extension(name= '.'.join(['lib', 'fastDistMatrix']),
+               #           sources=[os.path.join(os.getcwd(), 'src', 'distance_matrix.pyx')],
+               #           libraries=[],
+               #           include_dirs=[np.get_include()],
+               #           extra_compile_args = whole_compiler_args,
+               #           language='c++'
+               #           ),
                 Extension(name= '.'.join(['lib', 'GraphCutSupport']),
                           sources=[os.path.join(os.getcwd(), 'maxflow-v3.01', 'graph.cpp'),
                                    os.path.join(os.getcwd(), 'maxflow-v3.01', 'maxflow.cpp'),
@@ -165,7 +173,7 @@ setup(
         maintainer                    = AUTHOR,
         maintainer_email              = EMAIL,
         python_requires               = REQUIRES_PYTHON,
-        install_requires              = get_requires(REQUIREMENTS_FILENAME),
+        # install_requires              = get_requires(REQUIREMENTS_FILENAME),
         url                           = URL,
         download_url                  = URL,
         keywords                      = KEYWORDS,

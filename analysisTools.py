@@ -206,6 +206,24 @@ prova2_itk.SetSpacing( list(inputCT.GetSpacing())[0:2] )
 FloatImageType_2d = itk.Image[FType,2]
 HausdorffDistance(Input1=prova1_itk, Input2=prova2_itk, ImageType=FloatImageType_2d)
 #%%
+# Closest Euclidean distance from any non-zero pixel
+def SignedMaurerDistanceMap(img, ImageType, spacing = True):
+  SignedMaurerDistanceMapImageFilterType = itk.SignedMaurerDistanceMapImageFilter[ImageType, ImageType]
+  SignedMaurerDistanceMapImageFilter = SignedMaurerDistanceMapImageFilterType.New()
+  SignedMaurerDistanceMapImageFilter.SetUseImageSpacing(spacing)
+  SignedMaurerDistanceMapImageFilter.SetInput(img)
+  SignedMaurerDistanceMapImageFilter.Update()
+  return SignedMaurerDistanceMapImageFilter.GetOutput()
+
+def LDMap(Input1, Input2, ImageType, spacing = True):
+  distance_1 = itk.GetArrayFromImage(SignedMaurerDistanceMap(Input1, ImageType, spacing))
+  distance_2 = itk.GetArrayFromImage(SignedMaurerDistanceMap(Input2, ImageType, spacing))
+  A1 = (distance_1>1e-5).astype(np.float32)
+  B1 = (distance_2>1e-5).astype(np.float32)
+  LDMap_out = np.abs(A1 - B1) * np.maximum( distance_1, distance_2 )
+  return LDMap_out
+
+
 # Hausdorff local maps
 LDMap_final = LDMap(Input1=GCcontours, Input2=Manualcontours, ImageType=FloatImageType)
 plb.imshow(LDMap_final[310,:,:])

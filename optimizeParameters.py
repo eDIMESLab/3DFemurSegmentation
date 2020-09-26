@@ -11,8 +11,42 @@ import sys
 import fastDistMatrix
 import GraphCutSupport
 #%%
-import argparse
+import warnings
+import matplotlib.pylab as plb
+from copy import deepcopy
+from skopt import dump as skdump
+from skopt import load as skload
+from skopt.learning import GaussianProcessRegressor
+from skopt.optimizer import base_minimize
+from sklearn.utils import check_random_state
+from skopt.space import Real, Integer, Categorical
+from skopt.utils import use_named_args
+from skopt import gp_minimize
+from skopt import callbacks
 #%%
+def readNRRD(filename, ImageType):
+  # Read series
+  NRRDio = itk.NrrdImageIO.New()
+  NRRDio.SetFileType( itk.ImageIOBase.ASCII )
+  image_type = itk.Image[ImageType,3]
+  reader = itk.ImageFileReader[image_type].New()
+  reader.SetImageIO(NRRDio)
+  reader.SetFileName(filename)
+  reader.Update()
+  imgs_seq = reader.GetOutput()
+  metadatas = reader.GetMetaDataDictionary()
+  # Store metadata as a list of dictionaries (more readable and less issues)
+  meta_info = list(NRRDio.GetMetaDataDictionary().GetKeys())
+  if 'NRRD_measurement frame' in meta_info:
+    meta_info.remove('NRRD_measurement frame')
+  # for tag in meta_info:
+  #   try:
+  #     print(metadatas[tag])
+  #   except:
+  #     print("ERROR:", tag)
+  metadata = {tag:metadatas[tag] for tag in meta_info}
+  return imgs_seq, metadata
+
 
 # Dump 3D image into a 2D dicom image series with metadata adding option
 def Volume3DToDicom(imgObj, MetadataObj = None, outdir = "", format_templ = "%03d.dcm"):
@@ -474,14 +508,27 @@ def linearTransform(Img,
   return Result.GetOutput()
 
 
+# Old:
+# def DistanceTransform(ChamferInput):
+#   distanceMap = np.zeros(ChamferInput.shape)
+#   _infinityDistance = np.sum(ChamferInput.shape) + 1
+#   distanceMap[ChamferInput == 0] = _infinityDistance
+#   distanceMapPad = np.pad(distanceMap, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
+#   distanceMap = fastDistMatrix.ManhattanChamferDistance(distanceMapPad, distanceMap.shape)
+#   distanceMap = distanceMap[1:-1, 1:-1, 1:-1].copy()
+#   return distanceMap
+
 def DistanceTransform(ChamferInput):
   distanceMap = np.zeros(ChamferInput.shape)
   _infinityDistance = np.sum(ChamferInput.shape) + 1
   distanceMap[ChamferInput == 0] = _infinityDistance
   distanceMapPad = np.pad(distanceMap, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
-  distanceMap = fastDistMatrix.ManhattanChamferDistance(distanceMapPad, distanceMap.shape)
+  distanceMapPad_flat = distanceMapPad.flatten()
+  distanceMap = fastDistMatrix.ManhattanChamferDistance(distanceMapPad_flat, len(distanceMapPad_flat), distanceMap.shape)
+  distanceMap = distanceMap.reshape(distanceMapPad.shape)
   distanceMap = distanceMap[1:-1, 1:-1, 1:-1].copy()
   return distanceMap
+
 
 #%%
 ########################
@@ -592,6 +639,7 @@ def opening(labelImage,
   OpeningFilter.SetInput( labelImage )
   OpeningFilter.Update()
   return OpeningFilter.GetOutput()
+
 
 def erosion(labelImage,
             radius,
@@ -718,10 +766,10 @@ def duplicate(img,
 
 #%%
 # Uncomment when needed:
-# import matplotlib.pylab as plb
-# def showSome(imgObj, idx = 0):
-#   prova = itk.GetArrayFromImage(imgObj)
-#   plb.imshow(prova[idx,:,:])
+import matplotlib.pylab as plb
+def showSome(imgObj, idx = 0):
+  prova = itk.GetArrayFromImage(imgObj)
+  plb.imshow(prova[idx,:,:])
 #
 # def Read3DNifti(fn, t = 'unsigned char'):
 #   nifti_obj = itk.NiftiImageIO.New()
@@ -758,18 +806,31 @@ def parse_args ():
 
 
 #%%
+global inputCT
+global Inputmetadata
 
-if __name__ == "__main__":
+def GCAutoSegm (sigmaSmallScale,
+                sigmasLargeScale_number,
+                sigmasLargeScale_min,
+                sigmasLargeScale_step,
+                lowerThreshold,
+                upperThreshold,
+                binThres_criteria,
+                bone_criteriaA,
+                bone_criteriaB,
+                bone_smScale_criteria,
+                autoROI_criteriaLow,
+                autoROI_criteriaHigh,
+                m_DiffusionFilter_sigma,
+                m_SubstractFilter_scale,
+                EROSION_RADIUS,
+                MAX_DISTANCE_FOR_ADJACENT_BONES):
 
-  args = parse_args()
-  DicomDir = args.indir
-  outdir = args.outdir
+  global inputCT
+  global Inputmetadata
 
-  # Parameters
-  sigmaSmallScale = 1.5
-  sigmasLargeScale = [0.6, 0.8]
-  lowerThreshold = 25
-  upperThreshold = 600
+  sigmasLargeScale_max = sigmasLargeScale_min + sigmasLargeScale_number*sigmasLargeScale_step
+  sigmasLargeScale = np.arange(sigmasLargeScale_min, sigmasLargeScale_max, sigmasLargeScale_step)
 
   # Useful shortcut
   ShortType = itk.ctype('short')
@@ -782,44 +843,40 @@ if __name__ == "__main__":
   UCImageType = itk.Image[UCType,3]
   ULImageType = itk.Image[ULType,3]
 
-  # Read Dicoms Series and turn it into 3D object
-  inputCT, Inputmetadata = dicomsTo3D(DicomDir, ShortType)
-  # showSome(inputCT,50)
-
   print("Preprocessing")
-#%%
   ##################
   # PRE-PROCESSING #
   ##################
   print("Thresholding input image")
   thresholdedInputCT = thresholding(duplicate(inputCT, ShortImageType), lowerThreshold, upperThreshold) # Checked
-  # showSome(thresholdedInputCT, 50)
+  # showSome(thresholdedInputCT, 400)
 
   smallScaleSheetnessImage = multiscaleSheetness(multiScaleInput = castImage(thresholdedInputCT, OutputType=FloatImageType),
                                                  scales = [sigmaSmallScale],
                                                  SmoothingImageType = FloatImageType)
-  # showSome(smallScaleSheetnessImage,50)
+  # showSome(smallScaleSheetnessImage,400)
   print("Estimating soft-tissue voxels")
   smScale_bin = binaryThresholding(inputImage = smallScaleSheetnessImage,
-                                   lowerThreshold = -0.05,
-                                   upperThreshold = 0.05,
+                                   lowerThreshold = -binThres_criteria,
+                                   upperThreshold = binThres_criteria,
                                    outputImageType = UCType)
-  # showSome(smScale_bin,50)
+  # showSome(smScale_bin,400)
   smScale_cc = ConnectedComponents(inputImage = smScale_bin,
                                    outputImageType = ULType
                                   )
-  # showSome(smScale_cc,50)
+  # showSome(smScale_cc,400)
   smScale_rc = RelabelComponents(inputImage = smScale_cc,
                                  outputImageType=None)
-  # showSome(smScale_rc,50)
+  # showSome(smScale_rc,400)
   softTissueEstimation = binaryThresholding(inputImage = smScale_rc,
-                                            lowerThreshold = 1,
+                                            lowerThreshold = 1, # Extract largest non-zero connected component
                                             upperThreshold = 1)
-  # showSome(softTissueEstimation, 50)
+  # showSome(softTissueEstimation, 400)
   print("Estimating bone voxels")
   boneEstimation = itk.GetArrayFromImage(inputCT)
   smScale = itk.GetArrayFromImage(smallScaleSheetnessImage)
-  boneCondition = (boneEstimation > 400) | (boneEstimation > 250) & (smScale > 0.6)
+
+  boneCondition = (boneEstimation > bone_criteriaA) | (boneEstimation > bone_criteriaB) & (smScale > bone_smScale_criteria)
   boneEstimation[boneCondition] = 1
   boneEstimation[np.logical_not(boneCondition)] = 0
   print("Computing ROI from bone estimation using Chamfer Distance")
@@ -832,36 +889,35 @@ if __name__ == "__main__":
   boneDist.SetOrigin(inputCT.GetOrigin())
   boneDist.SetSpacing(inputCT.GetSpacing())
   boneDist.SetDirection(inputCT.GetDirection())
-  # showSome(boneDist, 50)
+  # showSome(boneDist, 400)
   autoROI  = binaryThresholding(inputImage = boneDist,
-                                lowerThreshold = 0,
-                                upperThreshold = 30,
+                                lowerThreshold = autoROI_criteriaLow,
+                                upperThreshold = autoROI_criteriaHigh,
                                 outputImageType = UCType)
-  # showSome(autoROI, 50)
+  # showSome(autoROI, 400)
   print("Unsharp masking")
   InputCT_float = castImage(inputCT, OutputType=FloatImageType)
   # I*G (discrete gauss)
   m_DiffusionFilter = Gaussian(GaussInput = InputCT_float,
-                               sigma = 1.0)
+                               sigma = m_DiffusionFilter_sigma)
   # showSome(m_DiffusionFilter, 50)
   # I - (I*G)
   m_SubstractFilter = substract(InputCT_float, m_DiffusionFilter)
   # showSome(m_SubstractFilter, 50)
   # k(I-(I*G))
   m_MultiplyFilter = linearTransform(m_SubstractFilter,
-                                     scale = 10.,
+                                     scale = m_SubstractFilter_scale,
                                      shift = 0.)
   # showSome(m_MultiplyFilter, 50)
   # I+k*(I-(I*G))
   inputCTUnsharpMasked = add(InputCT_float, m_MultiplyFilter)
-  # showSome(inputCTUnsharpMasked, 50)
+  # showSome(inputCTUnsharpMasked, 400)
   print("Computing multiscale sheetness measure at %d scales" % len(sigmasLargeScale))
   Sheetness = multiscaleSheetness(multiScaleInput=inputCTUnsharpMasked,
                                   scales = sigmasLargeScale,
                                   SmoothingImageType = FloatImageType,
                                   roi = autoROI)
-  # showSome(Sheetness, 50)
-#%%
+  # showSome(Sheetness, 400)
   ###########
   # Segment #
   ###########
@@ -871,25 +927,23 @@ if __name__ == "__main__":
                           sht = Sheetness,
                           ROI = autoROI
                           )
-  # showSome(gcResult, 50)
-#%%
+  # showSome(gcResult, 400)
+
   ###################
   # Bone-separation #
   ###################
   print("Bone Separation")
-  EROSION_RADIUS = 3
-  MAX_DISTANCE_FOR_ADJACENT_BONES = 15
 
   print("Computing Connected Components")
   mainIslands = ConnectedComponents(inputImage = gcResult,
                                     outputImageType = ULType)
-  # showSome(mainIslands, 50)
+  # showSome(mainIslands, 400)
   print("Erosion + Connected Components, ball radius=%d"% EROSION_RADIUS)
   eroded_gc = erosion(gcResult, EROSION_RADIUS, UCType)
-  # showSome(eroded_gc, 50)
+  # showSome(eroded_gc, 400)
   subIslands = ConnectedComponents(inputImage = eroded_gc,
                                    outputImageType = ULType)
-  # showSome(subIslands, 50)
+  # showSome(subIslands, 400)
   print("Discovering main islands containg bottlenecks")
   mainArray = itk.GetArrayFromImage(mainIslands)
   subArray = itk.GetArrayFromImage(subIslands)
@@ -905,14 +959,14 @@ if __name__ == "__main__":
       print("Computing distance from sub-island %d"% subIsland)
       distance = distanceMapByFastMarcher(image = subIslands,
                                           objectLabel = subIsland,
-                                          stoppingValue = MAX_DISTANCE_FOR_ADJACENT_BONES + 1,
+                                          stoppingValue = np.int(MAX_DISTANCE_FOR_ADJACENT_BONES + 1),
                                           ImageType = FloatImageType)
       for jdx in range(idx+1, len(subIslandsSortedBySize[l])):
         potentialAdjacentSubIsland = subIslandsSortedBySize[l][jdx]
         islandsAdjacent = isIslandWithinDistance(image = subIslands,
                                                  distanceImage = distance,
                                                  label = potentialAdjacentSubIsland,
-                                                 maxDistance = MAX_DISTANCE_FOR_ADJACENT_BONES
+                                                 maxDistance = np.int(MAX_DISTANCE_FOR_ADJACENT_BONES)
                                                 )
         subIslandsPairs += [ [l, subIsland, potentialAdjacentSubIsland] ] if islandsAdjacent else []
   print("Number of bottlenecks to be found: %d"% len(subIslandsPairs));
@@ -934,17 +988,395 @@ if __name__ == "__main__":
   relabelled_mainIslands.SetDirection(mainIslands.GetDirection())
   finalResult = RelabelComponents(inputImage = relabelled_mainIslands,
                                   outputImageType = UCType)
-  # showSome(finalResult, 50)
+  # showSome(finalResult, 400)
+  return finalResult
+
 #%%
-  # Save results
-  print("Saving")
-  print("Writing binary DICOMs to directory %s"% outdir)
-  Volume3DToDicom(imgObj = finalResult,
-                  MetadataObj = Inputmetadata,
-                  outdir = outdir)
+showSome(finalResult,380)
+GCSegm_arr = itk.GetArrayFromImage(finalResult)
+all_labels = {i: 0 for i in np.unique(GCSegm_arr) if i>0}
+if len(all_labels.keys()) <2:
+  return 1e8
+for z in range(0, GCSegm_arr.shape[0]):
+  for i in np.unique(GCSegm_arr[z,:,:]):
+    if i>0:
+      all_labels[i] +=1
+two_femur = list({k: v for k, v in sorted(all_labels.items(), key=lambda item: item[1], reverse=True)}.keys())[0:2]
+cond_res = (GCSegm_arr != two_femur[0]) & (GCSegm_arr != two_femur[1])
+if np.any(cond_res):
+  GCSegm_arr[cond_res] = 0
+GCSegm_arr[GCSegm_arr>0] = 1
+GCSegm = itk.GetImageFromArray(GCSegm_arr.astype(np.int16))
+showSome(GCSegm,400)
+GCSegm.GetLargestPossibleRegion().GetSize()[2]
 
 
 
-###########
-# THE END #
-###########
+#%%
+
+def GetBoundaries(img, ImageType, back_value=0, fore_value=1):
+  binaryContourImageFilterType = itk.BinaryContourImageFilter[ImageType,ImageType]
+  binaryContourFilter = binaryContourImageFilterType.New()
+  binaryContourFilter.SetInput(img)
+  binaryContourFilter.SetBackgroundValue(back_value)
+  binaryContourFilter.SetForegroundValue(fore_value)
+  binaryContourFilter.Update()
+  return itk.GetArrayFromImage(binaryContourFilter.GetOutput())
+
+def SignedMaurerDistanceMap(img, ImageType, spacing = True):
+  SignedMaurerDistanceMapImageFilterType = itk.SignedMaurerDistanceMapImageFilter[ImageType, ImageType]
+  SignedMaurerDistanceMapImageFilter = SignedMaurerDistanceMapImageFilterType.New()
+  SignedMaurerDistanceMapImageFilter.SetUseImageSpacing(spacing)
+  SignedMaurerDistanceMapImageFilter.SetInput(img)
+  SignedMaurerDistanceMapImageFilter.Update()
+  return SignedMaurerDistanceMapImageFilter.GetOutput()
+
+def LDMap(Input1, Input2, ImageType, spacing = True):
+  distance_1 = itk.GetArrayFromImage(SignedMaurerDistanceMap(Input1, ImageType, spacing))
+  distance_2 = itk.GetArrayFromImage(SignedMaurerDistanceMap(Input2, ImageType, spacing))
+  A1 = (distance_1>1e-5).astype(np.float32)
+  B1 = (distance_2>1e-5).astype(np.float32)
+  LDMap_out = np.abs(A1 - B1) * np.maximum( distance_1, distance_2 )
+  return LDMap_out
+
+
+
+#%%
+
+global ManualSegm
+global bin_presence
+
+all_arguments = { "GCSegm": ['sigmaSmallScale', 'sigmasLargeScale_number',
+                             'sigmasLargeScale_min', 'sigmasLargeScale_step',
+                             'lowerThreshold', 'upperThreshold',
+                             'binThres_criteria', 'bone_criteriaA',
+                             'bone_criteriaB', 'bone_smScale_criteria',
+                             'autoROI_criteriaLow', 'autoROI_criteriaHigh',
+                             'm_DiffusionFilter_sigma', 'm_SubstractFilter_scale',
+                             'EROSION_RADIUS', 'MAX_DISTANCE_FOR_ADJACENT_BONES']}
+# sigmaSmallScale = 1.5
+# sigmasLargeScale_number = 1
+# sigmasLargeScale_min = 0.6
+# sigmasLargeScale_step = 0.2
+# lowerThreshold = 25
+# upperThreshold = 600
+# binThres_criteria = 0.05
+# bone_criteriaA = 400
+# bone_criteriaB = 250
+# bone_smScale_criteria = 0.6
+# autoROI_criteriaLow  = 0
+# autoROI_criteriaHigh = 30
+# m_DiffusionFilter_sigma = 1.0
+# m_SubstractFilter_scale = 10.
+# EROSION_RADIUS = 3
+# MAX_DISTANCE_FOR_ADJACENT_BONES = 15
+
+spaces = {
+           "GCSegm": [ Real(1., 3., "uniform", name='sigmaSmallScale'),
+                       Integer(2, 10, "identity", name='sigmasLargeScale_number'),
+                       Real(0.1, 2.0, "uniform", name='sigmasLargeScale_min'),
+                       Real(0.1, 1., "uniform", name='sigmasLargeScale_step'),
+                       Integer(0, 600, "identity", name='lowerThreshold'),
+                       Integer(600, 1000, "identity", name='upperThreshold'),
+                       Real(0.01, 1., "uniform", name='binThres_criteria'),
+                       Integer(300, 800, "identity", name='bone_criteriaA'),
+                       Integer(100, 299, "identity", name='bone_criteriaB'),
+                       Real(0.1, 1., "uniform", name='bone_smScale_criteria'),
+                       Integer(0, 29, "identity", name='autoROI_criteriaLow'),
+                       Integer(30, 60, "identity", name='autoROI_criteriaHigh'),
+                       Real(0.1, 2.0, "uniform", name='m_DiffusionFilter_sigma'),
+                       Real(1., 30., "uniform", name='m_SubstractFilter_scale'),
+                       Categorical([3,5,7,9], name='EROSION_RADIUS'),
+                       Integer(5, 30, "identity", name='MAX_DISTANCE_FOR_ADJACENT_BONES')
+                    ]
+         }
+
+#%%
+
+def run_optimization(space_key, old_skf, n_calls, n_random_starts, outfile, init_seed):
+  # Set hyper-parameters space
+  space  = spaces[space_key]
+  # Set relevant variables
+  params_clsf = all_arguments[space_key]
+  ######################################
+  # Set objective function to minimize #
+  ######################################
+  @use_named_args(space)
+  def objective(**params):
+    global inputCT
+    global Inputmetadata
+    global ManualSegm
+    global bin_presence
+    print(params)
+
+    Segm_res = GCAutoSegm(sigmaSmallScale = params['sigmaSmallScale'],
+                          sigmasLargeScale_number = params['sigmasLargeScale_number'],
+                          sigmasLargeScale_min = params['sigmasLargeScale_min'],
+                          sigmasLargeScale_step = params['sigmasLargeScale_step'],
+                          lowerThreshold = params['lowerThreshold'],
+                          upperThreshold = params['upperThreshold'],
+                          binThres_criteria = params['binThres_criteria'],
+                          bone_criteriaA = params['bone_criteriaA'],
+                          bone_criteriaB = params['bone_criteriaB'],
+                          bone_smScale_criteria = params['bone_smScale_criteria'],
+                          autoROI_criteriaLow = params['autoROI_criteriaLow'],
+                          autoROI_criteriaHigh = params['autoROI_criteriaHigh'],
+                          m_DiffusionFilter_sigma = params['m_DiffusionFilter_sigma'],
+                          m_SubstractFilter_scale = params['m_SubstractFilter_scale'],
+                          EROSION_RADIUS = np.int(params['EROSION_RADIUS']),
+                          MAX_DISTANCE_FOR_ADJACENT_BONES = params['MAX_DISTANCE_FOR_ADJACENT_BONES']
+                         )
+    # Segm_res = GCAutoSegm(sigmaSmallScale = 1.5,
+    #                       sigmasLargeScale_number = 1,
+    #                       sigmasLargeScale_min = 0.6,
+    #                       sigmasLargeScale_step = 0.2,
+    #                       lowerThreshold = 25,
+    #                       upperThreshold = 600,
+    #                       binThres_criteria = 0.05,
+    #                       bone_criteriaA = 400,
+    #                       bone_criteriaB = 250,
+    #                       bone_smScale_criteria = 0.6,
+    #                       autoROI_criteriaLow  = 0,
+    #                       autoROI_criteriaHigh = 30,
+    #                       m_DiffusionFilter_sigma = 1.0,
+    #                       m_SubstractFilter_scale = 10.,
+    #                       EROSION_RADIUS = 3,
+    #                       MAX_DISTANCE_FOR_ADJACENT_BONES = 15)
+    # showSome(Segm_res,400)
+    GCSegm_arr = itk.GetArrayFromImage(Segm_res)
+    all_labels = {i: 0 for i in np.unique(GCSegm_arr) if i>0}
+    if len(all_labels.keys()) <2:
+      return 1e8
+    for z in range(0, GCSegm_arr.shape[0]):
+      for i in np.unique(GCSegm_arr[z,:,:]):
+        if i>0:
+          all_labels[i] +=1
+    two_femur = list({k: v for k, v in sorted(all_labels.items(), key=lambda item: item[1], reverse=True)}.keys())[0:2]
+    cond_res = (GCSegm_arr != two_femur[0]) & (GCSegm_arr != two_femur[1])
+    if np.any(cond_res):
+      GCSegm_arr[cond_res] = 0
+    GCSegm_arr[GCSegm_arr>0] = 1
+    GCSegm = itk.GetImageFromArray(GCSegm_arr.astype(np.int16))
+    # showSome(GCSegm,450)
+    # GCcontours = itk.GetImageFromArray(GetBoundaries(GCSegm, ShortImageType, 0, 1).astype(np.float32))
+    # GCcontours.SetOrigin(inputCT.GetOrigin())
+    # GCcontours.SetSpacing(inputCT.GetSpacing())
+    # GCcontours.SetDirection(inputCT.GetDirection())
+    # showSome(GCcontours,400)
+    # showSome(ManualSegm,400)
+    LDMap_finalNoBounds = LDMap(Input1=castImage(GCSegm, FloatImageType), Input2=castImage(ManualSegm, FloatImageType), ImageType=FloatImageType)
+    # plb.imshow(np.sqrt(LDMap_finalNoBounds[450,:,:]))
+    hd_slices = []
+    for z in range(LDMap_finalNoBounds[np.logical_not(bin_presence),:,:].shape[0]):
+      hd_slices += [np.max(LDMap_finalNoBounds[z,:,:])]
+    # plb.plot(np.arange(0,len(hd_slices)), hd_slices)
+    res = np.min(hd_slices)*(np.max(hd_slices) - np.min(hd_slices))
+    res += np.sum(LDMap_finalNoBounds[bin_presence,:,:])!=0
+    return res
+  ####################
+  # Run minimization #
+  ####################
+  checkpoint_callback = callbacks.CheckpointSaver(outfile, store_objective=False)
+  if not old_skf == "":
+    print("Retrieving old result and carry on the optimization from where it was left")
+    # Reload old skopt object to carry on the optimization
+    old_clsf_gp = skload(old_skf)
+    args = deepcopy(old_clsf_gp.specs['args'])
+    args['n_calls'] += n_calls
+    iters   = list(old_clsf_gp.x_iters)
+    y_iters = list(old_clsf_gp.func_vals)
+    if(isinstance(args['random_state'], np.random.RandomState)):
+      args['random_state'] = check_random_state(init_seed)
+      # gp_minimize related
+      if(isinstance(old_clsf_gp.specs['args']['base_estimator'], GaussianProcessRegressor)):
+        args['random_state'].randint(0, np.iinfo(np.int32).max)
+    # Define support function for objective
+    def check_or_opt(params):
+      if(len(iters) > 0):
+        y = y_iters.pop(0)
+        if(params != iters.pop(0)):
+          warnings.warn("Deviated from expected value, re-evaluating", RuntimeWarning)
+        else:
+          return y
+      return objective(params)
+    args['callback'] = [checkpoint_callback]
+    args['func'] = check_or_opt
+    clsf_gp = base_minimize(**args)
+    clsf_gp.specs['args']['func'] = objective
+  else:
+    print("Running minimization from scratch.")
+    clsf_gp = gp_minimize(objective,
+                          space,
+                          acq_func='EI',
+                          callback=[checkpoint_callback], # save temporary results
+                          n_calls=n_calls,
+                          n_random_starts=n_random_starts,
+                          random_state=init_seed,
+                          noise=1e-10)
+  return clsf_gp
+
+
+#%%
+
+
+
+if __name__ == "__main__":
+
+  # Multiple classifiers settings
+  global inputCT
+  global ManualSegm
+  global Inputmetadata
+  global bin_presence
+
+  DicomDir = "/home/PERSONALE/daniele.dallolio3/femur_segmentation/D0012_CTData"
+  ManualSegm_file = "/home/PERSONALE/daniele.dallolio3/femur_segmentation/D0012-label.nrrd"
+
+  FType = itk.ctype('float')
+  FloatImageType = itk.Image[FType,3]
+  ShortType = itk.ctype('short')
+  ShortImageType = itk.Image[ShortType,3]
+  # Read Unsupervised and Supervised segmentations
+  inputCT, Inputmetadata = dicomsTo3D(DicomDir, ShortType)
+
+  ManualSegm, ManualSegm_metadata = readNRRD(ManualSegm_file, ShortType)
+  # Manualcontours = itk.GetImageFromArray(GetBoundaries(ManualSegm, ShortImageType, 0, 1).astype(np.float32))
+  # Manualcontours.SetOrigin(inputCT.GetOrigin())
+  # Manualcontours.SetSpacing(inputCT.GetSpacing())
+  # Manualcontours.SetDirection(inputCT.GetDirection())
+  Manual_arr = itk.GetArrayFromImage(ManualSegm)
+  bin_presence = [ np.sum(Manual_arr[z,:,:])==0 for z in range(Manual_arr.shape[0])]
+  # plb.plot(np.arange(0,len(hd_slices)), bin_presence)
+
+  old_results = ""
+  n_random_starts = 200
+  n_calls = n_random_starts*5
+  outfile = "/home/PERSONALE/daniele.dallolio3/femur_segmentation/D0012_20200923.pkl"
+
+  old_results = outfile
+  # Run optimization function
+  result = run_optimization(space_key         = "GCSegm",
+                            old_skf           = old_results,
+                            n_calls           = n_calls,
+                            n_random_starts   = n_random_starts,
+                            outfile           = outfile,
+                            init_seed         = 101)
+  # Save final results
+  skdump(result, outfile, store_objective=False)
+
+
+len(result.x_iters)
+
+#%%
+############
+# ANALYSIS #
+############
+old_clsf_gp = skload(old_skf)
+y_iters = np.array(list(old_clsf_gp.func_vals))
+len(y_iters)
+y_iters[-5:]
+
+x_iters = np.array(old_clsf_gp.x_iters)
+
+y_iters_filt = y_iters[y_iters!=1e8]
+plb.plot(np.arange(0, len(y_iters_filt)), y_iters_filt)
+# plb.plot(np.arange(0, len(old_clsf_gp.x_iters)), y_iters)
+# _=plb.hist(y_iters_filt,100)
+np.min(y_iters)
+
+sorted(y_iters)
+
+for ag, v in zip(all_arguments['GCSegm'], x_iters[-1]):
+  print( " : ".join([ag, np.str(v)]) )
+
+
+
+
+
+for ag, v in zip(all_arguments['GCSegm'], x_iters[np.argmin(y_iters)]):
+  print( " : ".join([ag, np.str(v)]) )
+
+#%%
+sigmaSmallScale = 1.5
+sigmasLargeScale_number = 1
+sigmasLargeScale_min = 0.6
+sigmasLargeScale_step = 0.2
+lowerThreshold = 25
+upperThreshold = 600
+binThres_criteria = 0.05
+bone_criteriaA = 400
+bone_criteriaB = 250
+bone_smScale_criteria = 0.6
+autoROI_criteriaLow  = 0
+autoROI_criteriaHigh = 30
+m_DiffusionFilter_sigma = 1.0
+m_SubstractFilter_scale = 10.
+EROSION_RADIUS = 3
+MAX_DISTANCE_FOR_ADJACENT_BONES = 15
+
+
+
+
+#%%
+Xidx = -2
+sigmaSmallScale = x_iters[Xidx][0]
+sigmasLargeScale_number = np.int(x_iters[Xidx][1])
+sigmasLargeScale_min = x_iters[Xidx][2]
+sigmasLargeScale_step = x_iters[Xidx][3]
+lowerThreshold = np.int(x_iters[Xidx][4])
+upperThreshold = np.int(x_iters[Xidx][5])
+binThres_criteria = x_iters[Xidx][6]
+bone_criteriaA = np.int(x_iters[Xidx][7])
+bone_criteriaB = np.int(x_iters[Xidx][8])
+bone_smScale_criteria = x_iters[Xidx][9]
+autoROI_criteriaLow = np.int(x_iters[Xidx][10])
+autoROI_criteriaHigh = np.int(x_iters[Xidx][11])
+m_DiffusionFilter_sigma = x_iters[Xidx][12]
+m_SubstractFilter_scale = x_iters[Xidx][13]
+EROSION_RADIUS = np.int(x_iters[Xidx][14])
+MAX_DISTANCE_FOR_ADJACENT_BONES = np.int(x_iters[Xidx][15])
+#%%
+
+#%%
+sigmaSmallScale = x_iters[np.argmin(y_iters)][0]
+sigmasLargeScale_number = np.int(x_iters[np.argmin(y_iters)][1])
+sigmasLargeScale_min = x_iters[np.argmin(y_iters)][2]
+sigmasLargeScale_step = x_iters[np.argmin(y_iters)][3]
+lowerThreshold = np.int(x_iters[np.argmin(y_iters)][4])
+upperThreshold = np.int(x_iters[np.argmin(y_iters)][5])
+binThres_criteria = x_iters[np.argmin(y_iters)][6]
+bone_criteriaA = np.int(x_iters[np.argmin(y_iters)][7])
+bone_criteriaB = np.int(x_iters[np.argmin(y_iters)][8])
+bone_smScale_criteria = x_iters[np.argmin(y_iters)][9]
+autoROI_criteriaLow = np.int(x_iters[np.argmin(y_iters)][10])
+autoROI_criteriaHigh = np.int(x_iters[np.argmin(y_iters)][11])
+m_DiffusionFilter_sigma = x_iters[np.argmin(y_iters)][12]
+m_SubstractFilter_scale = x_iters[np.argmin(y_iters)][13]
+EROSION_RADIUS = np.int(x_iters[np.argmin(y_iters)][14])
+MAX_DISTANCE_FOR_ADJACENT_BONES = np.int(x_iters[np.argmin(y_iters)][15])
+#%%
+
+# Quality best till now
+sigmaSmallScale = 2.3431706848114375
+sigmasLargeScale_number = 7
+sigmasLargeScale_min = 0.5611119614464578
+sigmasLargeScale_step = 0.2062579541371359
+lowerThreshold = 25
+upperThreshold = 600
+binThres_criteria = 0.05
+bone_criteriaA = 400
+bone_criteriaB = 250
+bone_smScale_criteria = 0.5080780340864003
+autoROI_criteriaLow  = 0
+autoROI_criteriaHigh = 30
+m_DiffusionFilter_sigma = 0.8316166698338118
+m_SubstractFilter_scale = 10.
+EROSION_RADIUS = 3
+MAX_DISTANCE_FOR_ADJACENT_BONES = 15
+
+
+
+#%%
+
+#######
+# END #
+#######

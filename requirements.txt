@@ -1,4 +1,4 @@
 numpy
 cython>=0.29
 scipy
-itk
+itk=5.0.1
