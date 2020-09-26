@@ -47,7 +47,7 @@ long * ManhattanChamferDistance ( long * im,
       for ( long i=shapeX; i>0; --i ) {
         pos = i + trail_jk;  // [i,j,k] == i + j*width + k*area
         pos_i = pos + 1;     // [i-1,j,k] == (i+1) + j*width + k*area
-        pos_j = pos + width; // [i,j-1,k] == i + (j+1)*width + k*area
+        pos_j = pos + widthplus; // [i,j-1,k] == i + (j+1)*width + k*area
         pos_k = pos + area;  // [i,j,k-1] == i + j*width + (k+1)*area
         pixel = std :: min({im[pos],
                             im[pos_i] + weight,
