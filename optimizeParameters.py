@@ -523,7 +523,7 @@ def DistanceTransform(ChamferInput):
   _infinityDistance = np.sum(ChamferInput.shape) + 1
   distanceMap[ChamferInput == 0] = _infinityDistance
   distanceMapPad = np.pad(distanceMap, 1, mode='constant', constant_values=(_infinityDistance, _infinityDistance))
-  distanceMapPad_flat = distanceMapPad.flatten().astype(np.int_)
+  distanceMapPad_flat = distanceMapPad.flatten("C").astype(np.int_)
   distanceMap = fastDistMatrix.ComputeChamferDistance(distanceMapPad_flat,
                                                       len(distanceMapPad_flat),
                                                       distanceMap.shape[0],
@@ -533,6 +533,31 @@ def DistanceTransform(ChamferInput):
   distanceMap = distanceMap.reshape(distanceMapPad.shape)
   distanceMap = distanceMap[1:-1, 1:-1, 1:-1].copy()
   return distanceMap
+
+prova = distanceMap.reshape(distanceMapPad.shape)
+prova = prova[1:-1, 1:-1, 1:-1].copy()
+plb.imshow(prova[50,:,:])
+
+depth  = distanceMap.shape[0] + 1
+height = distanceMap.shape[1] + 1
+width  = distanceMap.shape[2] + 1
+area   = (width+1)*(height+1)
+im = distanceMapPad_flat
+for k in range(1,depth):
+  trail_k = k*area
+  for j in range(1,height):
+    trail_j = j*(width+1)
+    trail_jk = trail_j + trail_k
+    for i in range(1, width):
+      pos = i + trail_jk
+      # pos_i = pos - 1
+      # pos_j = pos - width
+      # pos_k = pos - area
+      # pixel = std :: min({im[pos],
+      #                     im[pos_i] + weight,
+      #                     im[pos_j] + weight,
+      #                     im[pos_k] + weight});
+      assert im[pos] == distanceMapPad[k,j,i]
 
 #%%
 ########################
@@ -994,27 +1019,6 @@ def GCAutoSegm (sigmaSmallScale,
                                   outputImageType = UCType)
   # showSome(finalResult, 400)
   return finalResult
-
-#%%
-showSome(finalResult,380)
-GCSegm_arr = itk.GetArrayFromImage(finalResult)
-all_labels = {i: 0 for i in np.unique(GCSegm_arr) if i>0}
-if len(all_labels.keys()) <2:
-  return 1e8
-for z in range(0, GCSegm_arr.shape[0]):
-  for i in np.unique(GCSegm_arr[z,:,:]):
-    if i>0:
-      all_labels[i] +=1
-two_femur = list({k: v for k, v in sorted(all_labels.items(), key=lambda item: item[1], reverse=True)}.keys())[0:2]
-cond_res = (GCSegm_arr != two_femur[0]) & (GCSegm_arr != two_femur[1])
-if np.any(cond_res):
-  GCSegm_arr[cond_res] = 0
-GCSegm_arr[GCSegm_arr>0] = 1
-GCSegm = itk.GetImageFromArray(GCSegm_arr.astype(np.int16))
-showSome(GCSegm,400)
-GCSegm.GetLargestPossibleRegion().GetSize()[2]
-
-
 
 #%%
 

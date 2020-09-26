@@ -10,19 +10,20 @@ long * ManhattanChamferDistance ( long * im,
 {
   long depth;
   long height;
-  long width;
+  long width, widthplus;
   long area;
   depth  = shapeZ + 1L;
   height = shapeY + 1L;
   width  = shapeX + 1L;
-  area   = width*height;
+  widthplus = width + 1L;
+  area   = widthplus*(height+1);
   long trail_j, trail_k, trail_jk;
   long pos, pos_i, pos_j, pos_k;
   long pixel;
   for ( long k=1L; k<depth; ++k ) {
     trail_k = k*area;
     for ( long j=1L; j<height; ++j ) {
-      trail_j = j*width;
+      trail_j = j*widthplus;
       trail_jk = trail_j + trail_k;
       for ( long i=1L; i<width; ++i ) {
         pos = i + trail_jk;  // [i,j,k] == i + j*width + k*area
