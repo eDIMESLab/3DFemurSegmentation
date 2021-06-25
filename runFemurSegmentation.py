@@ -533,9 +533,12 @@ def Segmentation(imgObj,
   dataCostSource = np.zeros(intensity.shape)
   cond = (intensity > 400) & (sheetness > 0) & roi!=0
   dataCostSource[cond] = 1 * COST_AMPLIFIER
-  dataCostPixels = _pixelIdImage[roi!=0].flatten()
-  flat_dataCostSink = dataCostSink[roi!=0].flatten()
-  flat_dataCostSource = dataCostSource[roi!=0].flatten()
+  # Regional function values setup
+  dataCostPixels = _pixelIdImage[roi!=0].flatten() # Pixels indexing (a pixel ID represent the node label in the graph)
+  flat_dataCostSink = dataCostSink[roi!=0].flatten() # Set t-link weights to Sink
+  flat_dataCostSource = dataCostSource[roi!=0].flatten() # Set t-link weights to Source
+  # Lower the t-link weight, higher the probability to be cut
+
   # initializeNeighbours prep
   Xcenters, XFromCenter, XToCenter = SheetnessBasedSmoothCost(pixelLeft  = _pixelIdImage[:, :, :-1],
                                                               pixelRight = _pixelIdImage[:, :, 1:],
